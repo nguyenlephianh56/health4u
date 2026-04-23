@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "927511023655",
+    "project_id": "health4u-292bd",
+    "storage_bucket": "health4u-292bd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:927511023655:android:e9bb6102e6e7ecc7bf7e02",
+        "android_client_info": {
+          "package_name": "com.example.health4u"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-nU0g87x1-yLgbXTAcQfcYZUSEK8wppk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
