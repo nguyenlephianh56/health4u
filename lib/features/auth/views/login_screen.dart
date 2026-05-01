@@ -13,6 +13,8 @@
 //   - AuthErrorBanner     (auth_error_banner.dart)
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -82,7 +84,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // Dùng ref.listen thay vì kiểm tra trong build() để tránh rebuild vô ích
   void _listenToAuthState(AuthState? prev, AuthState next) {
     if (next.status == AuthStatus.success) {
-      Navigator.pushReplacementNamed(context, '/home');
+      // Router tự redirect khi AuthRepo state = authenticated
     }
   }
 
@@ -145,8 +147,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () =>
-                                  Navigator.pushNamed(context, '/forgot-password'),
+                              onPressed: () {
+                                // TODO: Tạo màn hình forgot password sau
+                              },
                               child: const Text(
                                 'Quên mật khẩu?',
                                 style: TextStyle(
@@ -332,7 +335,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           style: TextStyle(color: Colors.black.withOpacity(0.55), fontSize: 14),
         ),
         GestureDetector(
-          onTap: () => Navigator.pushNamed(context, '/register'),
+          onTap: () => context.go(AppRoutes.register),
           child: const Text(
             'Đăng ký ngay',
             style: TextStyle(

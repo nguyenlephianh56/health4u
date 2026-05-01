@@ -13,6 +13,9 @@
 //   "Bắt đầu ngay"          → /login  (hoặc /register tùy luồng)
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../data/repositories/auth_repo.dart';
 import '../../../../core/constants/app_colors.dart';
 
 // ─── Data model cho mỗi trang Onboarding ────────────────────────────────────
@@ -62,14 +65,14 @@ const _pages = [
 ];
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with TickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -124,7 +127,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
   }
 
-  void _goToLogin() => Navigator.pushReplacementNamed(context, '/login');
+  void _goToLogin() {
+    // Đánh dấu đã xem onboarding → lần sau mở app vào thẳng Login
+    ref.read(authRepoProvider.notifier).completeOnboarding();
+    // Router tự redirect khi state thay đổi — không cần context.go()
+  }
 
   @override
   void dispose() {

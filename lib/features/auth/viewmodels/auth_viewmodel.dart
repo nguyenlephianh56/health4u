@@ -83,6 +83,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
       // 3. Lưu thông tin user vào Firestore — collection "users"
       //    Các field khớp hoàn toàn với thiết kế CSDL Firebase
       await _db.collection('users').doc(userId).set({
+        'role' : 'user',
         'email': email.trim(),
         'name': name.trim(),
         'gender': gender,

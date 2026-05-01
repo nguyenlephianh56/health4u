@@ -13,22 +13,20 @@
 // Vị trí đúng theo kiến trúc:
 //   lib/data/repositories/auth_repo.dart
 
-import 'package:flutter/foundation.dart' show ChangeNotifier;
+// lib/data/repositories/auth_repo.dart
+
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
 import 'auth_state_model.dart';
 
-// ════════════════════════════════════════════════════════════════════════════
-// CLASS 1: AuthRepo — StateNotifier<AuthStateModel>
-// Quản lý trạng thái auth cho toàn app (Riverpod state).
-// Được dùng bởi: GoRouter redirect, ShellScaffold, các ViewModel.
-// ════════════════════════════════════════════════════════════════════════════
-
+const _kHasSeenOnboarding = 'has_seen_onboarding';
 class AuthRepo extends StateNotifier<AuthStateModel> {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
@@ -36,27 +34,65 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
   AuthRepo({FirebaseAuth? auth, FirebaseFirestore? db})
       : _auth = auth ?? FirebaseAuth.instance,
         _db = db ?? FirebaseFirestore.instance,
-        super(const AuthStateModel.unknown()) {
-    // Lắng nghe Firebase Auth stream ngay từ đầu
+  // Bắt đầu ở loading — chờ _init() xong
+        super(const AuthStateModel(status: AppAuthStatus.loading)) {
+    _init();
+  }
+
+  // ── Khởi tạo một lần duy nhất ───────────────────────────────────────────
+  // Đọc SharedPreferences + lắng nghe Firebase cùng lúc
+  Future<void> _init() async {
+    // Đọc SharedPreferences trước (rất nhanh, local)
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool(_kHasSeenOnboarding) ?? false;
+
+    // Lấy user hiện tại ngay lập tức (không cần chờ stream)
+    final currentUser = _auth.currentUser;
+
+    if (currentUser == null) {
+      // Chưa đăng nhập
+      state = AuthStateModel(
+        status: hasSeenOnboarding
+            ? AppAuthStatus.unauthenticated  // đã xem onboarding → Login
+            : AppAuthStatus.onboarding,      // chưa xem → Onboarding
+      );
+    } else {
+      // Đã đăng nhập → đọc Firestore lấy thêm info
+      await _loadUserState(currentUser.uid);
+    }
+
+    // Sau khi load xong mới lắng nghe stream
+    // (tránh stream emit trước khi SharedPreferences được đọc)
     _auth.authStateChanges().listen(_onAuthChanged);
   }
 
-  // ── Xử lý khi auth state Firebase thay đổi ──────────────────────────────
+  // ── Xử lý khi đăng nhập / đăng xuất ────────────────────────────────────
   Future<void> _onAuthChanged(User? user) async {
+    // Bỏ qua lần emit đầu tiên vì _init() đã xử lý rồi
+    // (Chỉ xử lý khi state đã không còn loading)
+    if (state.isLoading) return;
+
     if (user == null) {
-      state = const AuthStateModel.unauthenticated();
+      final prefs = await SharedPreferences.getInstance();
+      final seen = prefs.getBool(_kHasSeenOnboarding) ?? false;
+      state = AuthStateModel(
+        status: seen
+            ? AppAuthStatus.unauthenticated
+            : AppAuthStatus.onboarding,
+      );
     } else {
       await _loadUserState(user.uid);
     }
   }
 
-  // ── Đọc role + trạng thái setup từ Firestore ────────────────────────────
+  // ── Đọc thông tin user từ Firestore ─────────────────────────────────────
   Future<void> _loadUserState(String uid) async {
     try {
       final doc = await _db.collection('users').doc(uid).get();
 
       if (!doc.exists || doc.data() == null) {
-        state = AuthStateModel.authenticatedNoSetup(
+        state = AuthStateModel(
+          status: AppAuthStatus.needsSetup,
           userId: uid,
           role: 'user',
         );
@@ -67,29 +103,38 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
       final role = (data['role'] as String?) ?? 'user';
       final heightCm = data['height_cm'];
 
-      state = heightCm != null
-          ? AuthStateModel.authenticated(userId: uid, role: role)
-          : AuthStateModel.authenticatedNoSetup(userId: uid, role: role);
-    } catch (_) {
-      state = const AuthStateModel.unauthenticated();
+      state = AuthStateModel(
+        status: heightCm != null
+            ? AppAuthStatus.authenticated
+            : AppAuthStatus.needsSetup,
+        userId: uid,
+        role: role,
+      );
+    } catch (e) {
+      debugPrint('[AuthRepo] Firestore error: $e');
+      state = const AuthStateModel(status: AppAuthStatus.unauthenticated);
     }
   }
 
-  // ── Public methods — được gọi từ ViewModel ───────────────────────────────
+  // ── Public methods ───────────────────────────────────────────────────────
 
-  /// Đăng nhập — gọi từ AuthViewModel.login()
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
+  /// Gọi khi user bấm "Bắt đầu" hoặc "Bỏ qua" ở OnboardingScreen
+  Future<void> completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHasSeenOnboarding, true);
+    state = const AuthStateModel(status: AppAuthStatus.unauthenticated);
+  }
+
+  /// Đăng nhập
+  Future<void> login({required String email, required String password}) async {
     await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
+    // _onAuthChanged tự gọi sau khi Firebase emit
   }
 
-  /// Đăng ký — gọi từ AuthViewModel.register()
-  /// ✅ Set role = "user" mặc định khi tạo tài khoản
+  /// Đăng ký — role mặc định "user"
   Future<void> register({
     required String name,
     required String email,
@@ -101,30 +146,33 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
       email: email.trim(),
       password: password,
     );
-
     final uid = credential.user!.uid;
 
     await _db.collection('users').doc(uid).set({
-      'email': email.trim(),
-      'name': name.trim(),
-      'gender': gender,
-      'dob': dob,
-      'password_hash': _hashPassword(password),
-      'role': 'user',                           // ✅ mặc định "user"
-      'height_cm': null,
-      'weight_kg': null,
+      'email':          email.trim(),
+      'name':           name.trim(),
+      'gender':         gender,
+      'dob':            dob,
+      'password_hash':  _hashPassword(password),
+      'role':           'user',
+      'height_cm':      null,
+      'weight_kg':      null,
       'activity_level': null,
-      'goal': null,
+      'goal':           null,
       'current_streak': 0,
-      'total_points': 0,
-      'avatar_url': null,
-      'created_at': FieldValue.serverTimestamp(),
+      'total_points':   0,
+      'avatar_url':     null,
+      'created_at':     FieldValue.serverTimestamp(),
     });
 
     await credential.user!.updateDisplayName(name.trim());
+
+    // Đăng ký xong → đánh dấu đã xem onboarding
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHasSeenOnboarding, true);
   }
 
-  /// Lưu thông tin bổ sung — gọi từ InfoSetupViewModel.saveInfo()
+  /// Lưu thông tin bổ sung sau khi đăng ký (InfoSetupScreen)
   Future<void> saveUserInfo({
     required double heightCm,
     required double weightKg,
@@ -135,60 +183,44 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
     if (uid == null) throw Exception('Chưa đăng nhập');
 
     await _db.collection('users').doc(uid).update({
-      'height_cm': heightCm,
-      'weight_kg': weightKg,
+      'height_cm':      heightCm,
+      'weight_kg':      weightKg,
       'activity_level': activityLevel,
-      'goal': goal,
+      'goal':           goal,
     });
 
-    // Reload lại state để router biết setup đã xong → redirect /home
     await _loadUserState(uid);
   }
 
-  /// Đăng xuất — gọi từ ProfileViewModel
+  /// Đăng xuất — giữ hasSeenOnboarding = true → vào Login thẳng
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // Helpers
-  String _hashPassword(String password) =>
-      sha256.convert(utf8.encode(password)).toString();
+  String _hashPassword(String p) =>
+      sha256.convert(utf8.encode(p)).toString();
 
   String? get currentUserId => _auth.currentUser?.uid;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CLASS 2: AuthRouterNotifier — ChangeNotifier thuần
-// Chỉ có 1 nhiệm vụ: gọi notifyListeners() khi auth state thay đổi
-// để GoRouter tự re-evaluate redirect.
-//
-// KHÔNG quản lý state, KHÔNG gọi Firestore.
-// Chỉ lắng nghe Firebase Auth stream và thông báo cho GoRouter.
+// AuthRouterNotifier — ChangeNotifier cho GoRouter.refreshListenable
 // ════════════════════════════════════════════════════════════════════════════
-
 class AuthRouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
   AuthRouterNotifier(this._ref) {
-    // Lắng nghe AuthRepo state thay đổi → báo GoRouter refresh
     _ref.listen<AuthStateModel>(
       authRepoProvider,
-          (_, __) => notifyListeners(), // Mỗi khi AuthRepo state đổi → GoRouter chạy lại redirect
+          (_, __) => notifyListeners(),
     );
   }
 }
 
 // ─── Providers ───────────────────────────────────────────────────────────────
-
-/// Provider chính — dùng ở ShellScaffold, app_router redirect
 final authRepoProvider =
-StateNotifierProvider<AuthRepo, AuthStateModel>((ref) {
-  return AuthRepo();
-});
+StateNotifierProvider<AuthRepo, AuthStateModel>((ref) => AuthRepo());
 
-/// Provider cho GoRouter refreshListenable
-/// GoRouter cần Listenable → dùng AuthRouterNotifier (ChangeNotifier)
 final authRouterNotifierProvider =
-ChangeNotifierProvider<AuthRouterNotifier>((ref) {
-  return AuthRouterNotifier(ref);
-});
+ChangeNotifierProvider<AuthRouterNotifier>(
+        (ref) => AuthRouterNotifier(ref));

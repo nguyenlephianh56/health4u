@@ -17,6 +17,9 @@
 //   - AuthErrorBanner   → auth/widgets/auth_error_banner.dart
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../data/repositories/auth_repo.dart';
+import '../../../router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -130,7 +133,26 @@ class _InfoSetupScreenState extends ConsumerState<InfoSetupScreen>
   // ── Lắng nghe state → điều hướng khi success ────────────────────────────
   void _listenState(InfoSetupState? prev, InfoSetupState next) {
     if (next.status == InfoSetupStatus.success) {
-      Navigator.pushReplacementNamed(context, '/home');
+      // Hiện thông báo thành công → router tự vào home
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Text(
+                'Đăng ký thành công! Chào mừng bạn 🎉',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF16A34A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 

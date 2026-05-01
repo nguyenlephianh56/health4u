@@ -15,6 +15,8 @@
 //   - DobPickerField      → dob_picker_field.dart
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -109,7 +111,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   void _listenToAuthState(AuthState? prev, AuthState next) {
     if (next.status == AuthStatus.success) {
       // Sau đăng ký → sang InfoSetupScreen để điền chiều cao, cân nặng...
-      Navigator.pushReplacementNamed(context, '/info-setup');
+      // Router tự redirect khi AuthRepo state = needsSetup
     }
   }
 
@@ -443,7 +445,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         ),
         GestureDetector(
           onTap: () =>
-              Navigator.pushReplacementNamed(context, '/login'),
+              context.go(AppRoutes.login),
           child: const Text(
             'Đăng nhập',
             style: TextStyle(

@@ -6,52 +6,30 @@
 // Khác với AuthState (features/auth/viewmodels/auth_state.dart):
 //   → AuthState      : chỉ dùng cho UI Login/Register (loading/success/error)
 //   → AuthStateModel : dùng cho router guard (isLoggedIn/role/isSetupCompleted)
+enum AppAuthStatus {
+  loading,          // Đang khởi động, chờ Firebase + SharedPreferences
+  onboarding,       // Lần đầu vào app, chưa xem onboarding
+  unauthenticated,  // Đã xem onboarding, chưa đăng nhập
+  needsSetup,       // Đã đăng nhập, chưa điền info (height, weight...)
+  authenticated,    // Đã đăng nhập + đầy đủ thông tin → vào home
+}
 
 class AuthStateModel {
-  final bool isLoggedIn;
-
-  // true khi height_cm != null trong Firestore (đã qua InfoSetupScreen)
-  final bool isSetupCompleted;
-
-  // "user" | "admin" | null (chưa load xong)
-  final String? role;
-
+  final AppAuthStatus status;
+  final String? role;    // "user" | "admin"
   final String? userId;
 
   const AuthStateModel({
-    this.isLoggedIn = false,
-    this.isSetupCompleted = false,
+    required this.status,
     this.role,
     this.userId,
   });
 
-  // App vừa khởi động, chưa biết trạng thái
-  const AuthStateModel.unknown() : this();
-
-  // Chưa đăng nhập
-  const AuthStateModel.unauthenticated() : this(isLoggedIn: false);
-
-  // Đã đăng nhập nhưng chưa điền đủ thông tin (chưa qua InfoSetup)
-  const AuthStateModel.authenticatedNoSetup({
-    required String userId,
-    required String role,
-  }) : this(
-    isLoggedIn: true,
-    isSetupCompleted: false,
-    role: role,
-    userId: userId,
-  );
-
-  // Đã đăng nhập + đã setup đầy đủ
-  const AuthStateModel.authenticated({
-    required String userId,
-    required String role,
-  }) : this(
-    isLoggedIn: true,
-    isSetupCompleted: true,
-    role: role,
-    userId: userId,
-  );
-
-  bool get isAdmin => role == 'admin';
+  // Shortcut getters cho router
+  bool get isLoading        => status == AppAuthStatus.loading;
+  bool get isOnboarding     => status == AppAuthStatus.onboarding;
+  bool get isUnauthenticated=> status == AppAuthStatus.unauthenticated;
+  bool get needsSetup       => status == AppAuthStatus.needsSetup;
+  bool get isAuthenticated  => status == AppAuthStatus.authenticated;
+  bool get isAdmin          => role == 'admin';
 }
