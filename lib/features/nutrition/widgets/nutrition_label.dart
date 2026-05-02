@@ -1,37 +1,30 @@
 import 'package:flutter/material.dart';
 
 class NutritionLabel extends StatelessWidget {
-  final String label;
   final String value;
-  final String unit;
-  final Color iconColor;
-  final IconData icon;
+  final String label;
+  final Color dotColor;
 
   const NutritionLabel({
     super.key,
-    required this.label,
     required this.value,
-    required this.unit,
-    required this.iconColor,
-    required this.icon,
+    required this.label,
+    required this.dotColor,
   });
+
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: iconColor, size: 24),
-        const SizedBox(height: 8),
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black)),
-              TextSpan(text: " $unit", style: const TextStyle(color: Colors.grey, fontSize: 14)),
-            ],
-          ),
-        ),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        Row(
+          children: [
+            CircleAvatar(radius: 4, backgroundColor: dotColor),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(color: Colors.grey)),
+          ],
+        )
       ],
     );
   }

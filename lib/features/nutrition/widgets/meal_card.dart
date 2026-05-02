@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../data/models/recipe_model.dart'; // Import Model từ tầng data
 import '../views/cooking_detail_screen.dart';
 
 class MealCard extends StatelessWidget {
-  final RecipeModel recipe;
-  const MealCard({super.key, required this.recipe});
+  final Map<String, dynamic> meal;
+  final VoidCallback? onSwapTap;
+
+  const MealCard({super.key, required this.meal, this.onSwapTap});
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -13,7 +15,7 @@ class MealCard extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CookingDetailScreen(recipe: recipe),
+            builder: (context) => CookingDetailScreen(meal: meal),
           ),
         );
       },
@@ -22,16 +24,28 @@ class MealCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            )
           ],
         ),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(recipe.imageUrl, width: 80, height: 80, fit: BoxFit.cover),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+                image: const DecorationImage(
+                  image: NetworkImage('https://via.placeholder.com/150'),
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -39,32 +53,49 @@ class MealCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: [
-                      const Icon(Icons.restaurant, size: 14, color: AppColors.secondary),
-                      const SizedBox(width: 4),
-                      Text(recipe.mealType, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.secondary)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(recipe.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("${recipe.calories} kcal", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                       Row(
                         children: [
-                          const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
+                          const Icon(Icons.local_fire_department, color: AppColors.secondary, size: 16),
                           const SizedBox(width: 4),
-                          Text(recipe.prepTime, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(
+                            meal['type'],
+                            style: const TextStyle(
+                                color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Colors.grey, size: 14),
+                          const SizedBox(width: 4),
+                          Text(meal['time'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
                         ],
                       )
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    meal['name'],
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text('${meal['cal']} kcal',
+                          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      Text(meal['macros'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     ],
                   )
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            IconButton(
+              icon: const Icon(Icons.swap_horiz, color: Colors.grey),
+              onPressed: onSwapTap,
+            ),
           ],
         ),
       ),
