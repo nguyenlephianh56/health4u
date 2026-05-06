@@ -59,6 +59,7 @@ class AuthTextField extends StatelessWidget {
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          enableIMEPersonalizedLearning: true,
           validator: validator,
           onChanged: onChanged,
           style: const TextStyle(

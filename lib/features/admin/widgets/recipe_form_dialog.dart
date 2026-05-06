@@ -1,29 +1,17 @@
 // lib/features/admin/widgets/recipe_form_dialog.dart
-//
-// Mô tả: Popup Dialog để Thêm hoặc Sửa recipe.
-// Khi recipe == null → chế độ Thêm mới.
-// Khi recipe != null → chế độ Sửa (điền sẵn dữ liệu).
-//
-// Gọi từ: AdminDashboardScreen khi bấm "Add New Recipe" hoặc nút sửa.
-//
-// Cách dùng:
-//   showDialog(
-//     context: context,
-//     builder: (_) => RecipeFormDialog(
-//       recipe: null,            // null = thêm mới
-//       onSave: (recipe) { ... },
-//     ),
-//   );
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../data/models/recipe_model.dart';
+import '../../../data/services/cloudinary_service.dart';
 import '../../../core/constants/app_colors.dart';
 
 class RecipeFormDialog extends StatefulWidget {
-  final RecipeModel? recipe;  // null = thêm mới, có giá trị = sửa
+  final RecipeModel? recipe;
   final void Function(RecipeModel) onSave;
 
   const RecipeFormDialog({
@@ -38,7 +26,8 @@ class RecipeFormDialog extends StatefulWidget {
 
 class _RecipeFormDialogState extends State<RecipeFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _uuid = const Uuid();
+  final _uuid    = const Uuid();
+  final _picker  = ImagePicker();
 
   // ── Controllers ──────────────────────────────────────────────────────────
   late final TextEditingController _nameCtrl;
@@ -47,17 +36,18 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
   late final TextEditingController _proteinCtrl;
   late final TextEditingController _carbsCtrl;
   late final TextEditingController _fatCtrl;
-  late final TextEditingController _imageUrlCtrl;
 
   // ── State ────────────────────────────────────────────────────────────────
-  String _mealType = 'Breakfast';
-  bool _isVegan = false;
-  bool _isVegetarian = false;
+  String  _mealType     = 'Breakfast';
+  bool    _isVegan      = false;
+  bool    _isVegetarian = false;
 
-  // Instructions: mỗi phần tử là 1 bước, mặc định 4 bước rỗng
+  // Image state
+  File?   _pickedImageFile;   // File ảnh đã chọn từ máy (chưa upload)
+  String  _imageUrl     = ''; // URL cuối cùng (sau khi upload Cloudinary)
+  bool    _isUploading  = false; // Đang upload lên Cloudinary
+
   late List<TextEditingController> _instructionCtrls;
-
-  // Ingredients: list các map controller
   late List<_IngredientControllers> _ingredientCtrls;
 
   static const _mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
@@ -67,7 +57,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     super.initState();
     final r = widget.recipe;
 
-    // Điền sẵn dữ liệu nếu đang sửa
     _nameCtrl     = TextEditingController(text: r?.name ?? '');
     _prepTimeCtrl = TextEditingController(
         text: r != null ? r.prepTimeMin.toString() : '');
@@ -79,27 +68,25 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
         text: r != null ? r.nutrition.carbs.toStringAsFixed(0) : '');
     _fatCtrl      = TextEditingController(
         text: r != null ? r.nutrition.fat.toStringAsFixed(0) : '');
-    _imageUrlCtrl = TextEditingController(text: r?.imageUrl ?? '');
 
     _mealType     = r?.mealType ?? 'Breakfast';
     _isVegan      = r?.flags.isVegan ?? false;
     _isVegetarian = r?.flags.isVegetarian ?? false;
 
-    // Instructions: dùng dữ liệu cũ nếu có, không thì 4 bước rỗng
+    // Nếu đang sửa recipe đã có ảnh → giữ URL cũ
+    _imageUrl = r?.imageUrl ?? '';
+
     final existingSteps = r?.instructions ?? [];
-    final steps = existingSteps.isNotEmpty
-        ? existingSteps
-        : ['', '', '', '']; // 4 bước mặc định
+    final steps = existingSteps.isNotEmpty ? existingSteps : ['', '', '', ''];
     _instructionCtrls =
         steps.map((s) => TextEditingController(text: s)).toList();
 
-    // Ingredients
     final existingIngredients = r?.ingredients ?? [];
     _ingredientCtrls = existingIngredients.isNotEmpty
         ? existingIngredients
         .map((ing) => _IngredientControllers.fromIngredient(ing))
         .toList()
-        : [_IngredientControllers.empty()]; // 1 ingredient rỗng mặc định
+        : [_IngredientControllers.empty()];
   }
 
   @override
@@ -110,29 +97,76 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     _proteinCtrl.dispose();
     _carbsCtrl.dispose();
     _fatCtrl.dispose();
-    _imageUrlCtrl.dispose();
     for (final c in _instructionCtrls) c.dispose();
     for (final c in _ingredientCtrls) c.dispose();
     super.dispose();
   }
 
-  // ── Thêm / xóa bước instructions ─────────────────────────────────────────
-  void _addStep() {
-    setState(() => _instructionCtrls.add(TextEditingController()));
+  // ── Image picker ─────────────────────────────────────────────────────────
+
+  /// Mở thư viện ảnh → chọn ảnh → upload Cloudinary → lưu URL
+  Future<void> _pickAndUploadImage() async {
+    // 1. Mở thư viện ảnh
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85, // Nén ảnh còn 85% để giảm dung lượng upload
+      maxWidth: 1200,   // Giới hạn chiều rộng tối đa
+    );
+
+    if (picked == null) return; // User bấm huỷ
+
+    final file = File(picked.path);
+
+    setState(() {
+      _pickedImageFile = file; // Hiện preview ngay lập tức
+      _isUploading     = true; // Hiện loading indicator
+    });
+
+    try {
+      // 2. Upload lên Cloudinary
+      final url = await CloudinaryService.uploadImage(file);
+
+      // 3. Lưu URL trả về
+      setState(() {
+        _imageUrl    = url;
+        _isUploading = false;
+      });
+
+      _showSuccess('Tải ảnh lên thành công!');
+    } catch (e) {
+      setState(() {
+        _isUploading     = false;
+        _pickedImageFile = null; // Reset preview nếu upload thất bại
+      });
+      _showError('Tải ảnh thất bại: ${e.toString()}');
+    }
   }
 
+  /// Xoá ảnh đã chọn
+  void _removeImage() {
+    setState(() {
+      _pickedImageFile = null;
+      _imageUrl        = '';
+    });
+  }
+
+  // ── Instructions ─────────────────────────────────────────────────────────
+
+  void _addStep() =>
+      setState(() => _instructionCtrls.add(TextEditingController()));
+
   void _removeStep(int index) {
-    if (_instructionCtrls.length <= 1) return; // tối thiểu 1 bước
+    if (_instructionCtrls.length <= 1) return;
     setState(() {
       _instructionCtrls[index].dispose();
       _instructionCtrls.removeAt(index);
     });
   }
 
-  // ── Thêm / xóa ingredient ────────────────────────────────────────────────
-  void _addIngredient() {
-    setState(() => _ingredientCtrls.add(_IngredientControllers.empty()));
-  }
+  // ── Ingredients ──────────────────────────────────────────────────────────
+
+  void _addIngredient() =>
+      setState(() => _ingredientCtrls.add(_IngredientControllers.empty()));
 
   void _removeIngredient(int index) {
     if (_ingredientCtrls.length <= 1) return;
@@ -142,11 +176,19 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     });
   }
 
-  // ── Lưu form ─────────────────────────────────────────────────────────────
+  // ── Save ─────────────────────────────────────────────────────────────────
+
   void _handleSave() {
+    // Validate form (tên, dinh dưỡng, thời gian...)
     if (!_formKey.currentState!.validate()) return;
 
-    // Build instructions (lọc bỏ bước rỗng)
+    // Kiểm tra đang upload thì chưa cho lưu
+    if (_isUploading) {
+      _showError('Vui lòng chờ ảnh tải xong');
+      return;
+    }
+
+    // Lọc bỏ bước hướng dẫn rỗng
     final instructions = _instructionCtrls
         .map((c) => c.text.trim())
         .where((s) => s.isNotEmpty)
@@ -157,7 +199,7 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
       return;
     }
 
-    // Build ingredients (lọc bỏ dòng rỗng)
+    // Lọc bỏ ingredient rỗng
     final ingredients = _ingredientCtrls
         .where((c) => c.nameCtrl.text.trim().isNotEmpty)
         .map((c) => IngredientItem(
@@ -169,23 +211,23 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
         .toList();
 
     final recipe = RecipeModel(
-      id:          widget.recipe?.id ?? '',
-      name:        _nameCtrl.text.trim(),
-      mealType:    _mealType,
-      nutrition:   RecipeNutrition(
+      id:           widget.recipe?.id ?? '',
+      name:         _nameCtrl.text.trim(),
+      mealType:     _mealType,
+      nutrition:    RecipeNutrition(
         calories: double.tryParse(_caloriesCtrl.text) ?? 0,
         protein:  double.tryParse(_proteinCtrl.text)  ?? 0,
         carbs:    double.tryParse(_carbsCtrl.text)    ?? 0,
         fat:      double.tryParse(_fatCtrl.text)      ?? 0,
       ),
-      prepTimeMin: int.tryParse(_prepTimeCtrl.text) ?? 0,
+      prepTimeMin:  int.tryParse(_prepTimeCtrl.text) ?? 0,
       instructions: instructions,
-      flags:       RecipeFlags(
+      flags:        RecipeFlags(
         isVegan:      _isVegan,
         isVegetarian: _isVegetarian,
       ),
-      ingredients: ingredients,
-      imageUrl:    _imageUrlCtrl.text.trim(),
+      ingredients:  ingredients,
+      imageUrl:     _imageUrl, // URL từ Cloudinary (hoặc rỗng nếu không có ảnh)
     );
 
     widget.onSave(recipe);
@@ -193,12 +235,29 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: Colors.red,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+        const SizedBox(width: 8),
+        Text(msg),
+      ]),
+      backgroundColor: const Color(0xFF16A34A),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.recipe != null;
@@ -214,10 +273,7 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Header ──────────────────────────────────────────────────
             _buildHeader(isEdit),
-
-            // ── Scrollable form ─────────────────────────────────────────
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -226,65 +282,299 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tên món ăn
+                      // ── Tên món ──────────────────────────────────────────
                       _sectionLabel('Tên món ăn'),
-                      _textField(
+                      _StableTextField(
                         controller: _nameCtrl,
                         hint: 'VD: Cơm gà xối mỡ',
-                        validator: (v) => v!.isEmpty ? 'Vui lòng nhập tên' : null,
+                        validator: (v) =>
+                        v!.isEmpty ? 'Vui lòng nhập tên' : null,
                       ),
                       const SizedBox(height: 16),
 
-                      // Bữa ăn
+                      // ── Bữa ăn ───────────────────────────────────────────
                       _sectionLabel('Bữa ăn (Meal Type)'),
                       _buildMealTypePicker(),
                       const SizedBox(height: 16),
 
-                      // Dinh dưỡng
+                      // ── Dinh dưỡng ───────────────────────────────────────
                       _sectionLabel('Dinh dưỡng'),
-                      _buildNutritionRow(),
-                      const SizedBox(height: 16),
-
-                      // Thời gian chuẩn bị
-                      _sectionLabel('Thời gian chuẩn bị (phút)'),
-                      _textField(
-                        controller: _prepTimeCtrl,
-                        hint: '30',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        validator: (v) => v!.isEmpty ? 'Nhập thời gian' : null,
+                      Row(
+                        children: [
+                          Expanded(child: _StableMiniNumberField(
+                              controller: _caloriesCtrl, label: 'Calo (kcal)')),
+                          const SizedBox(width: 8),
+                          Expanded(child: _StableMiniNumberField(
+                              controller: _proteinCtrl, label: 'Protein (g)')),
+                          const SizedBox(width: 8),
+                          Expanded(child: _StableMiniNumberField(
+                              controller: _carbsCtrl, label: 'Carbs (g)')),
+                          const SizedBox(width: 8),
+                          Expanded(child: _StableMiniNumberField(
+                              controller: _fatCtrl, label: 'Fat (g)')),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
-                      // Hướng dẫn nấu
+                      // ── Thời gian ────────────────────────────────────────
+                      _sectionLabel('Thời gian chuẩn bị (phút)'),
+                      _StableTextField(
+                        controller: _prepTimeCtrl,
+                        hint: '30',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        validator: (v) =>
+                        v!.isEmpty ? 'Nhập thời gian' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Hướng dẫn ────────────────────────────────────────
                       _sectionLabel('Hướng dẫn nấu'),
                       _buildInstructionsSection(),
                       const SizedBox(height: 16),
 
-                      // Nguyên liệu
+                      // ── Nguyên liệu ──────────────────────────────────────
                       _sectionLabel('Nguyên liệu'),
                       _buildIngredientsSection(),
                       const SizedBox(height: 16),
 
-                      // Flags
+                      // ── Flags ────────────────────────────────────────────
                       _sectionLabel('Phân loại'),
                       _buildFlags(),
                       const SizedBox(height: 16),
 
-                      // Image URL
-                      _sectionLabel('Link ảnh (Cloudinary URL)'),
-                      _textField(
-                        controller: _imageUrlCtrl,
-                        hint: 'https://res.cloudinary.com/...',
-                        keyboardType: TextInputType.url,
-                      ),
+                      // ── Ảnh món ăn (IMAGE PICKER + CLOUDINARY) ───────────
+                      _sectionLabel('Ảnh món ăn'),
+                      _buildImagePicker(),
                       const SizedBox(height: 24),
 
-                      // Nút lưu
+                      // ── Nút lưu ──────────────────────────────────────────
                       _buildSaveButton(isEdit),
                     ],
                   ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Widget: Image Picker ─────────────────────────────────────────────────
+  Widget _buildImagePicker() {
+    // Trạng thái 1: Đang upload → hiện loading
+    if (_isUploading) {
+      return Container(
+        width: double.infinity,
+        height: 140,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: AppColors.primary,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Đang tải ảnh lên Cloudinary...',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Trạng thái 2: Đã có ảnh (preview + nút xoá)
+    if (_pickedImageFile != null || _imageUrl.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Preview ảnh
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: _pickedImageFile != null
+            // Ảnh vừa chọn từ máy (chưa upload xong - không nên xảy ra vì
+            // chúng ta set _pickedImageFile trước khi upload)
+                ? Image.file(
+              _pickedImageFile!,
+              width: double.infinity,
+              height: 180,
+              fit: BoxFit.cover,
+            )
+            // Ảnh đã upload (load từ Cloudinary URL)
+                : Image.network(
+              _imageUrl,
+              width: double.infinity,
+              height: 180,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  height: 180,
+                  color: Colors.white,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (_, __, ___) => Container(
+                height: 180,
+                color: Colors.white,
+                child: const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Colors.black26, size: 40),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Badge URL + 2 nút hành động
+          Row(
+            children: [
+              // Badge trạng thái
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          size: 14, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Đã upload thành công',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF16A34A),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Nút đổi ảnh
+              GestureDetector(
+                onTap: _pickAndUploadImage,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Đổi ảnh',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Nút xoá ảnh
+              GestureDetector(
+                onTap: _removeImage,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEB),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Xoá',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFE53935),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Trạng thái 3: Chưa có ảnh → nút chọn ảnh
+    return GestureDetector(
+      onTap: _pickAndUploadImage,
+      child: Container(
+        width: double.infinity,
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.25),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add_photo_alternate_outlined,
+                color: AppColors.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Chọn ảnh từ thư viện',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Ảnh sẽ được upload lên Cloudinary',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.black.withOpacity(0.4),
               ),
             ),
           ],
@@ -338,7 +628,8 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
           onTap: () => setState(() => _mealType = type),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: isSelected ? AppColors.primary : Colors.white,
               borderRadius: BorderRadius.circular(10),
@@ -362,42 +653,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     );
   }
 
-  Widget _buildNutritionRow() {
-    return Row(
-      children: [
-        Expanded(child: _miniNumberField(_caloriesCtrl, 'Calo (kcal)')),
-        const SizedBox(width: 8),
-        Expanded(child: _miniNumberField(_proteinCtrl, 'Protein (g)')),
-        const SizedBox(width: 8),
-        Expanded(child: _miniNumberField(_carbsCtrl, 'Carbs (g)')),
-        const SizedBox(width: 8),
-        Expanded(child: _miniNumberField(_fatCtrl, 'Fat (g)')),
-      ],
-    );
-  }
-
-  Widget _miniNumberField(TextEditingController ctrl, String label) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 11,
-                color: Colors.black.withOpacity(0.5),
-                fontWeight: FontWeight.w500)),
-        const SizedBox(height: 4),
-        TextFormField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-          validator: (v) => v!.isEmpty ? '?' : null,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          decoration: _inputDecoration(hint: '0'),
-        ),
-      ],
-    );
-  }
-
   Widget _buildInstructionsSection() {
     return Column(
       children: [
@@ -407,7 +662,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Số thứ tự bước
                 Container(
                   width: 28,
                   height: 28,
@@ -427,17 +681,17 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
                     ),
                   ),
                 ),
-                // TextField bước
                 Expanded(
                   child: TextFormField(
+                    key: ValueKey('step_$i'),
                     controller: _instructionCtrls[i],
                     maxLines: 2,
                     style: const TextStyle(fontSize: 14),
-                    decoration: _inputDecoration(
-                        hint: 'Nhập bước ${i + 1}...'),
+                    enableIMEPersonalizedLearning: true,
+                    decoration:
+                    _inputDecoration(hint: 'Nhập bước \${i + 1}...'),
                   ),
                 ),
-                // Nút xóa bước (ẩn nếu chỉ còn 1)
                 if (_instructionCtrls.length > 1)
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline,
@@ -448,8 +702,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
             ),
           );
         }),
-
-        // Nút thêm bước
         GestureDetector(
           onTap: _addStep,
           child: Container(
@@ -487,7 +739,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
   Widget _buildIngredientsSection() {
     return Column(
       children: [
-        // Header row
         const Row(
           children: [
             Expanded(flex: 3, child: _ColHeader(label: 'Tên nguyên liệu')),
@@ -495,11 +746,10 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
             Expanded(flex: 2, child: _ColHeader(label: 'Số lượng')),
             SizedBox(width: 8),
             Expanded(flex: 2, child: _ColHeader(label: 'Đơn vị')),
-            SizedBox(width: 36), // space for delete btn
+            SizedBox(width: 36),
           ],
         ),
         const SizedBox(height: 6),
-
         ...List.generate(_ingredientCtrls.length, (i) {
           final ing = _ingredientCtrls[i];
           return Padding(
@@ -509,8 +759,10 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
                 Expanded(
                   flex: 3,
                   child: TextFormField(
+                    key: ValueKey('ing_name_$i'),
                     controller: ing.nameCtrl,
                     style: const TextStyle(fontSize: 13),
+                    enableIMEPersonalizedLearning: true,
                     decoration: _inputDecoration(hint: 'VD: Gạo'),
                   ),
                 ),
@@ -531,12 +783,13 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
                 Expanded(
                   flex: 2,
                   child: TextFormField(
+                    key: ValueKey('ing_unit_$i'),
                     controller: ing.unitCtrl,
                     style: const TextStyle(fontSize: 13),
+                    enableIMEPersonalizedLearning: true,
                     decoration: _inputDecoration(hint: 'g / ml / cái'),
                   ),
                 ),
-                // Nút xóa
                 if (_ingredientCtrls.length > 1)
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline,
@@ -549,8 +802,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
             ),
           );
         }),
-
-        // Nút thêm nguyên liệu
         GestureDetector(
           onTap: _addIngredient,
           child: Container(
@@ -607,15 +858,24 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: _handleSave,
+        // Disable nút khi đang upload
+        onPressed: _isUploading ? null : _handleSave,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
           elevation: 0,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
         ),
-        child: Text(
+        child: _isUploading
+            ? const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: Colors.white),
+        )
+            : Text(
           isEdit ? 'Cập nhật món ăn' : 'Thêm món ăn',
           style: const TextStyle(
               fontSize: 16, fontWeight: FontWeight.w700),
@@ -624,7 +884,6 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     );
   }
 
-  // Helpers
   Widget _sectionLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -639,30 +898,11 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     );
   }
 
-  Widget _textField({
-    required TextEditingController controller,
-    required String hint,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      validator: validator,
-      maxLines: maxLines,
-      style: const TextStyle(fontSize: 14),
-      decoration: _inputDecoration(hint: hint),
-    );
-  }
-
   InputDecoration _inputDecoration({required String hint}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(
-          color: Colors.black.withOpacity(0.3), fontSize: 13),
+      hintStyle:
+      TextStyle(color: Colors.black.withOpacity(0.3), fontSize: 13),
       filled: true,
       fillColor: Colors.white,
       contentPadding:
@@ -687,30 +927,154 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
   }
 }
 
-// ── Helper widget: tiêu đề cột ───────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// _StableTextField — ĐỔI thành StatelessWidget, BỎ FocusNode
+// FocusNode + addListener → rebuild loop → IME tiếng Việt bị reset
+// ════════════════════════════════════════════════════════════════════════════
+class _StableTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String?)? validator;
+  final int maxLines;
+
+  const _StableTextField({
+    required this.controller,
+    required this.hint,
+    this.keyboardType,
+    this.inputFormatters,
+    this.validator,
+    this.maxLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      validator: validator,
+      maxLines: maxLines,
+      enableIMEPersonalizedLearning: true,
+      style: const TextStyle(fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.black.withOpacity(0.3), fontSize: 13),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+        errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+        focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.red, width: 2)),
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// _StableMiniNumberField — ĐỔI thành StatelessWidget, BỎ FocusNode
+// ════════════════════════════════════════════════════════════════════════════
+class _StableMiniNumberField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+
+  const _StableMiniNumberField({
+    required this.controller,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withOpacity(0.5),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          enableIMEPersonalizedLearning: true,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))
+          ],
+          validator: (v) => v!.isEmpty ? '?' : null,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: '0',
+            hintStyle: TextStyle(color: Colors.black.withOpacity(0.3), fontSize: 13),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+            errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+            focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red, width: 2)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── _ColHeader ────────────────────────────────────────────────────────────────
 class _ColHeader extends StatelessWidget {
   final String label;
   const _ColHeader({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Text(label,
-        style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Colors.black.withOpacity(0.45)));
+    return Text(
+      label,
+      style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.black.withOpacity(0.45)),
+    );
   }
 }
 
-// ── Helper widget: toggle flag (Vegan / Chay) ────────────────────────────────
+// ── _FlagChip ─────────────────────────────────────────────────────────────────
 class _FlagChip extends StatelessWidget {
   final String label;
   final bool value;
   final void Function(bool) onChanged;
-  const _FlagChip(
-      {required this.label,
-        required this.value,
-        required this.onChanged});
+
+  const _FlagChip({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -718,7 +1082,8 @@ class _FlagChip extends StatelessWidget {
       onTap: () => onChanged(!value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding:
+        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: value
               ? const Color(0xFF16A34A).withOpacity(0.1)
@@ -743,7 +1108,7 @@ class _FlagChip extends StatelessWidget {
   }
 }
 
-// ── Helper class: nhóm controllers cho 1 nguyên liệu ────────────────────────
+// ── _IngredientControllers ────────────────────────────────────────────────────
 class _IngredientControllers {
   final TextEditingController nameCtrl;
   final TextEditingController amountCtrl;

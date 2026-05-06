@@ -8,7 +8,6 @@
 // Vai trò MVVM:
 //   → VIEW: Chỉ lo UI, lắng nghe AdminState từ AdminViewModel
 //   → Gọi viewModel.addRecipe() / updateRecipe() / deleteRecipe()
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -216,7 +215,7 @@ class _ContentSection extends StatelessWidget {
   void _confirmDelete(BuildContext context, RecipeModel recipe) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -230,13 +229,16 @@ class _ContentSection extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              vm.deleteRecipe(recipe.id);
-              Navigator.pop(context);
+            onPressed: () async {
+              // ✅ Pop dialog TRƯỚC rồi mới xóa data
+              // Thứ tự quan trọng: nếu xóa trước → stream emit → rebuild
+              // → dialogContext invalid → Navigator bị locked → crash
+              Navigator.pop(dialogContext);
+              await vm.deleteRecipe(recipe.id);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFE53935),
