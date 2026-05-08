@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,14 +6,68 @@ import '../viewmodels/nutrition_viewmodel.dart';
 import '../widgets/meal_card.dart';
 import '../widgets/nutrition_label.dart';
 
-class MealPlanScreen extends ConsumerWidget {
+class MealPlanScreen extends ConsumerStatefulWidget {
   const MealPlanScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MealPlanScreen> createState() => _MealPlanScreenState();
+}
+
+class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
+  final ScrollController _calendarScrollController = ScrollController();
+  int _previousSelectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Mỗi lần mở màn hình, tự chọn đúng ngày hiện tại (T2..CN => 0..6)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final now = DateTime.now().toLocal();
+      final todayIndex = (now.weekday - 1).clamp(0, 6);
+      _previousSelectedIndex = todayIndex;
+      ref.read(selectedDayIndexProvider.notifier).state = todayIndex;
+      _scrollToSelectedDay(todayIndex);
+    });
+  }
+
+  @override
+  void dispose() {
+    _calendarScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToSelectedDay(int selectedIndex) {
+    if (!_calendarScrollController.hasClients) return;
+
+    const double itemWidth = 58; // width 50 + margin ngang (4 * 2)
+    final double viewportWidth = _calendarScrollController.position.viewportDimension;
+
+    final double targetOffset =
+        (selectedIndex * itemWidth) - (viewportWidth / 2) + (itemWidth / 2);
+
+    final double maxScroll = _calendarScrollController.position.maxScrollExtent;
+    final double safeOffset = targetOffset.clamp(0.0, maxScroll);
+
+    _calendarScrollController.animateTo(
+      safeOffset,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final nutritionState = ref.watch(nutritionViewModelProvider);
-    // 1. Lấy index ngày đang được chọn
     final selectedIndex = ref.watch(selectedDayIndexProvider);
+
+    // Lấy đầu tuần theo thứ 2 (real-time theo ngày hiện tại)
+    final now = DateTime.now().toLocal();
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -32,31 +85,76 @@ class MealPlanScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                 child: Column(
                   children: [
-                    _buildHeader(),
+                    _buildHeader(weekStart),
                     const SizedBox(height: 25),
-                    // 2. Truyền selectedIndex vào Calendar
-                    _buildCalendar(ref, selectedIndex),
+                    _buildCalendar(ref, selectedIndex, weekStart),
                   ],
                 ),
               ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (currentChild, previousChildren) {
+                  return Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
+                },
+                transitionBuilder: (child, animation) {
+                  final currentIndex = (child.key as ValueKey<int>).value;
+                  final isForward = currentIndex > _previousSelectedIndex;
 
-              ListView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                children: [
-                  // 3. Truyền state và selectedIndex để Summary thay đổi theo ngày
-                  _buildDailySummary(nutritionState, selectedIndex),
-                  const SizedBox(height: 20),
-                  ...nutritionState.meals.map(
-                        (meal) => MealCard(
-                      meal: meal,
-                      onSwapTap: () {
-                        // Logic đổi món
-                      },
+                  final inBegin =
+                  isForward ? const Offset(1.0, 0.0) : const Offset(-1.0, 0.0);
+                  final outEnd =
+                  isForward ? const Offset(-1.0, 0.0) : const Offset(1.0, 0.0);
+
+                  final inSlide = Tween<Offset>(
+                    begin: inBegin,
+                    end: Offset.zero,
+                  ).animate(animation);
+
+                  final outSlide = Tween<Offset>(
+                    begin: Offset.zero,
+                    end: outEnd,
+                  ).animate(animation);
+
+                  final isIncoming = currentIndex == selectedIndex;
+
+                  return ClipRect(
+                    child: SlideTransition(
+                      position: isIncoming ? inSlide : outSlide,
+                      child: FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      ),
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(selectedIndex),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: Column(
+                      children: [
+                        _buildDailySummary(nutritionState, selectedIndex, weekStart),
+                        const SizedBox(height: 20),
+                        ...nutritionState.meals.map(
+                              (meal) => MealCard(
+                            meal: meal,
+                            onSwapTap: () {
+                              // Logic đổi món
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -65,53 +163,56 @@ class MealPlanScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader() {
+  String _formatDate(DateTime date) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year}';
+  }
+
+  Widget _buildHeader(DateTime weekStart) {
+    final weekEnd = weekStart.add(const Duration(days: 6));
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Weekly Meal Plan',
+            const Text(
+              'Kế hoạch bữa ăn tuần',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
-              'Week of May 3',
-              style: TextStyle(
+              'Tuần từ ${_formatDate(weekStart)} đến ${_formatDate(weekEnd)}',
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.white70,
               ),
             ),
           ],
         ),
-        CircleAvatar(
-          backgroundColor: Colors.white,
-          child: Icon(
-            Icons.person,
-            color: AppColors.primary,
-          ),
-        )
       ],
     );
   }
 
-  // --- CẬP NHẬT TRUYỀN INDEX VÀ ĐỔI LOGIC DẤU CHẤM ---
-  Widget _buildCalendar(WidgetRef ref, int selectedIndex) {
-    final days = [
-      {'day': 'MON', 'date': '3'},
-      {'day': 'TUE', 'date': '4'},
-      {'day': 'WED', 'date': '5'},
-      {'day': 'THU', 'date': '6'},
-      {'day': 'FRI', 'date': '7'},
-      {'day': 'SAT', 'date': '8'},
-      {'day': 'SUN', 'date': '9'},
-    ];
+  Widget _buildCalendar(WidgetRef ref, int selectedIndex, DateTime weekStart) {
+    final dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+
+    final days = List.generate(7, (index) {
+      final date = weekStart.add(Duration(days: index));
+      return {
+        'day': dayLabels[index],
+        'date': date.day.toString(),
+      };
+    });
+
+    final now = DateTime.now().toLocal();
+    final isSameDate = (DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
     return Container(
       height: 80,
@@ -121,16 +222,21 @@ class MealPlanScreen extends ConsumerWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: ListView.builder(
+        controller: _calendarScrollController,
         scrollDirection: Axis.horizontal,
         itemCount: days.length,
         itemBuilder: (context, index) {
           final isSelected = index == selectedIndex;
-
-          // Mặc định THU (index 3) là hôm nay. Bạn có thể thay đổi sau nếu làm lịch thực tế.
-          final isToday = index == 3;
+          final currentDate = weekStart.add(Duration(days: index));
+          final isToday = isSameDate(currentDate, now);
 
           return GestureDetector(
-            onTap: () => ref.read(selectedDayIndexProvider.notifier).state = index,
+            onTap: () {
+              if (index == selectedIndex) return;
+              _previousSelectedIndex = selectedIndex;
+              ref.read(selectedDayIndexProvider.notifier).state = index;
+              _scrollToSelectedDay(index);
+            },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 4),
               width: 50,
@@ -158,12 +264,10 @@ class MealPlanScreen extends ConsumerWidget {
                       color: isSelected ? AppColors.primary : Colors.white,
                     ),
                   ),
-                  // Dấu chấm CHỈ hiện ở ngày "Hôm nay"
                   if (isToday) ...[
                     const SizedBox(height: 2),
                     CircleAvatar(
                       radius: 2.5,
-                      // Đổi màu tương phản với nền (nếu ô đang chọn nền trắng -> chấm xanh, ngược lại chấm trắng)
                       backgroundColor: isSelected ? AppColors.primary : Colors.white,
                     ),
                   ]
@@ -176,14 +280,20 @@ class MealPlanScreen extends ConsumerWidget {
     );
   }
 
-  // --- CẬP NHẬT HIỂN THỊ DỮ LIỆU ĐỘNG ---
-  Widget _buildDailySummary(dynamic nutritionState, int selectedIndex) {
-    // List ánh xạ index với Thứ và Ngày để giao diện tự đổi
-    final daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    final dates = ['May 3', 'May 4', 'May 5', 'May 6', 'May 7', 'May 8', 'May 9'];
+  Widget _buildDailySummary(dynamic nutritionState, int selectedIndex, DateTime weekStart) {
+    final daysOfWeek = [
+      'Thứ Hai',
+      'Thứ Ba',
+      'Thứ Tư',
+      'Thứ Năm',
+      'Thứ Sáu',
+      'Thứ Bảy',
+      'Chủ Nhật'
+    ];
 
-    String currentDayName = daysOfWeek[selectedIndex];
-    String currentDateText = dates[selectedIndex];
+    final currentDate = weekStart.add(Duration(days: selectedIndex));
+    final currentDayName = daysOfWeek[selectedIndex];
+    final currentDateText = _formatDate(currentDate);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
@@ -196,7 +306,7 @@ class MealPlanScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    currentDayName, // Thay "Sunday"
+                    currentDayName,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -205,7 +315,7 @@ class MealPlanScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    currentDateText, // Thay "May 9"
+                    currentDateText,
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -226,7 +336,7 @@ class MealPlanScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   const Text(
-                    'total kcal',
+                    'Tổng kcal',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -240,12 +350,11 @@ class MealPlanScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Sử dụng trực tiếp dữ liệu từ nutritionState thay cho số cứng
-              _buildMacroCard('${nutritionState.protein}g', 'Protein', const Color(0xFF4285F4)),
+              _buildMacroCard('${nutritionState.protein}g', 'Đạm', const Color(0xFF4285F4)),
               const SizedBox(width: 10),
-              _buildMacroCard('${nutritionState.carbs}g', 'Carbs', const Color(0xFFF9A825)),
+              _buildMacroCard('${nutritionState.carbs}g', 'Tinh bột', const Color(0xFFF9A825)),
               const SizedBox(width: 10),
-              _buildMacroCard('${nutritionState.fat}g', 'Fat', const Color(0xFFEA4335)),
+              _buildMacroCard('${nutritionState.fat}g', 'Chất béo', const Color(0xFFEA4335)),
             ],
           )
         ],

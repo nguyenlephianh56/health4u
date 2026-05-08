@@ -453,32 +453,48 @@ class _IngredientTile extends StatelessWidget {
   String _typeLabelVi(String t) {
     switch (t.toLowerCase()) {
       case 'protein':
-        return 'Đạm';
-      case 'grains':
-        return 'Ngũ cốc';
+      case 'meat':
+      case 'seafood':
+        return 'Thịt & Hải sản';
       case 'vegetables':
-        return 'Rau củ';
+      case 'veggie':
+        return 'Rau & Củ quả';
+      case 'dairy':
+      case 'eggs':
+      case 'dairy_eggs':
+        return 'Sữa & Trứng';
+      case 'grains':
+      case 'carbs':
+        return 'Ngũ cốc & Tinh bột';
       case 'spices':
-        return 'Gia vị';
       case 'fats':
-        return 'Chất béo';
+      case 'oil':
+        return 'Gia vị & Dầu ăn';
       default:
-        return t;
+        return 'Khác';
     }
   }
 
   Color _typeBg(String t) {
     switch (t.toLowerCase()) {
       case 'protein':
+      case 'meat':
+      case 'seafood':
         return const Color(0xFFE4ECFF);
-      case 'grains':
-        return const Color(0xFFFFEFD8);
       case 'vegetables':
+      case 'veggie':
         return const Color(0xFFDCFCE7);
+      case 'dairy':
+      case 'eggs':
+      case 'dairy_eggs':
+        return const Color(0xFFFFF7D6);
+      case 'grains':
+      case 'carbs':
+        return const Color(0xFFFFEFD8);
       case 'spices':
-        return const Color(0xFFFCE7F3);
       case 'fats':
-        return const Color(0xFFFEE2E2);
+      case 'oil':
+        return const Color(0xFFFCE7F3);
       default:
         return const Color(0xFFE2E8F0);
     }
@@ -487,15 +503,23 @@ class _IngredientTile extends StatelessWidget {
   Color _typeText(String t) {
     switch (t.toLowerCase()) {
       case 'protein':
+      case 'meat':
+      case 'seafood':
         return const Color(0xFF3B82F6);
-      case 'grains':
-        return const Color(0xFFF59E0B);
       case 'vegetables':
+      case 'veggie':
         return const Color(0xFF22C55E);
+      case 'dairy':
+      case 'eggs':
+      case 'dairy_eggs':
+        return const Color(0xFFEAB308);
+      case 'grains':
+      case 'carbs':
+        return const Color(0xFFF59E0B);
       case 'spices':
-        return const Color(0xFFEC4899);
       case 'fats':
-        return const Color(0xFFEF4444);
+      case 'oil':
+        return const Color(0xFFEC4899);
       default:
         return const Color(0xFF475569);
     }
