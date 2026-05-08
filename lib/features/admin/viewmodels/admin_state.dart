@@ -1,14 +1,11 @@
 // lib/features/admin/viewmodels/admin_state.dart
 
 import '../../../data/models/recipe_model.dart';
+import '../../../data/models/workout_model.dart';
 
 enum AdminStatus { initial, loading, success, error }
-
-// Tab đang active ở màn hình Admin
-enum AdminTab { content, users }
-
-// Sub-tab trong Content
-enum ContentTab { recipes, workouts }
+enum AdminTab    { content, users }
+enum ContentTab  { recipes, workouts }
 
 class AdminState {
   final AdminStatus status;
@@ -20,11 +17,12 @@ class AdminState {
   final int userCount;
 
   // Tab đang chọn
-  final AdminTab activeTab;
-  final ContentTab activeContentTab;
+  final AdminTab    activeTab;
+  final ContentTab  activeContentTab;
 
-  // Danh sách recipes (stream)
-  final List<RecipeModel> recipes;
+  // Dữ liệu realtime
+  final List<RecipeModel>  recipes;
+  final List<WorkoutModel> workouts;
 
   const AdminState({
     this.status           = AdminStatus.initial,
@@ -35,17 +33,19 @@ class AdminState {
     this.activeTab        = AdminTab.content,
     this.activeContentTab = ContentTab.recipes,
     this.recipes          = const [],
+    this.workouts         = const [],
   });
 
   AdminState copyWith({
-    AdminStatus?    status,
-    String?         errorMessage,
-    int?            recipeCount,
-    int?            workoutCount,
-    int?            userCount,
-    AdminTab?       activeTab,
-    ContentTab?     activeContentTab,
-    List<RecipeModel>? recipes,
+    AdminStatus?       status,
+    String?            errorMessage,
+    int?               recipeCount,
+    int?               workoutCount,
+    int?               userCount,
+    AdminTab?          activeTab,
+    ContentTab?        activeContentTab,
+    List<RecipeModel>?  recipes,
+    List<WorkoutModel>? workouts,
   }) {
     return AdminState(
       status:           status           ?? this.status,
@@ -56,6 +56,7 @@ class AdminState {
       activeTab:        activeTab        ?? this.activeTab,
       activeContentTab: activeContentTab ?? this.activeContentTab,
       recipes:          recipes          ?? this.recipes,
+      workouts:         workouts         ?? this.workouts,
     );
   }
 }

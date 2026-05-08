@@ -1,0 +1,78 @@
+// lib/data/models/workout_model.dart
+
+class ExerciseItem {
+  final String id;
+  final String name;
+  final int sets;
+  final int reps;
+  final int restSec;
+
+  const ExerciseItem({
+    required this.id,
+    required this.name,
+    required this.sets,
+    required this.reps,
+    required this.restSec,
+  });
+
+  factory ExerciseItem.fromMap(Map<String, dynamic> map) {
+    return ExerciseItem(
+      id:      map['id']?.toString() ?? '',
+      name:    map['name']?.toString() ?? '',
+      sets:    (map['sets'] as num?)?.toInt() ?? 0,
+      reps:    (map['reps'] as num?)?.toInt() ?? 0,
+      restSec: (map['rest_sec'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id':       id,
+    'name':     name,
+    'sets':     sets,
+    'reps':     reps,
+    'rest_sec': restSec,
+  };
+}
+
+class WorkoutModel {
+  final String id;          // Firestore document ID
+  final String title;
+  final String category;    // "Cardio" | "Strength" | "Yoga"
+  final String difficulty;  // "Beginner" | "Intermediate" | "Advanced"
+  final int durationMin;
+  final List<ExerciseItem> exercises;
+  final String imageUrl;
+
+  const WorkoutModel({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.difficulty,
+    required this.durationMin,
+    required this.exercises,
+    required this.imageUrl,
+  });
+
+  factory WorkoutModel.fromFirestore(String docId, Map<String, dynamic> data) {
+    return WorkoutModel(
+      id:          docId,
+      title:       data['title']?.toString() ?? '',
+      category:    data['category']?.toString() ?? 'Cardio',
+      difficulty:  data['difficulty']?.toString() ?? 'Beginner',
+      durationMin: (data['duration_min'] as num?)?.toInt() ?? 0,
+      exercises:   ((data['exercises'] as List?) ?? [])
+          .map((e) => ExerciseItem.fromMap(Map<String, dynamic>.from(e)))
+          .toList(),
+      imageUrl:    data['image_url']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+    'title':        title,
+    'category':     category,
+    'difficulty':   difficulty,
+    'duration_min': durationMin,
+    'exercises':    exercises.map((e) => e.toMap()).toList(),
+    'image_url':    imageUrl,
+  };
+}

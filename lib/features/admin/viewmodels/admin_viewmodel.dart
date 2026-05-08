@@ -1,44 +1,41 @@
 // lib/features/admin/viewmodels/admin_viewmodel.dart
-//
-// Mô tả: ViewModel quản lý toàn bộ logic Admin.
-// View KHÔNG gọi Firestore trực tiếp — chỉ gọi hàm trong file này.
 
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../data/models/recipe_model.dart';
+import '../../../data/models/workout_model.dart';
 import '../../../data/repositories/admin_repo.dart';
 import 'admin_state.dart';
 
-// ─── Provider ────────────────────────────────────────────────────────────────
 final adminViewModelProvider =
 StateNotifierProvider<AdminViewModel, AdminState>((ref) {
   final repo = ref.watch(adminRepoProvider);
   return AdminViewModel(repo);
 });
 
-// ─── ViewModel ───────────────────────────────────────────────────────────────
 class AdminViewModel extends StateNotifier<AdminState> {
   final AdminRepo _repo;
-  StreamSubscription<List<RecipeModel>>? _recipesSub;
+  StreamSubscription<List<RecipeModel>>?  _recipesSub;
+  StreamSubscription<List<WorkoutModel>>? _workoutsSub;
 
   AdminViewModel(this._repo) : super(const AdminState()) {
-    // Load ngay khi khởi tạo
     loadDashboard();
     _listenRecipes();
+    _listenWorkouts();
   }
 
-  // ── Tải thống kê dashboard ───────────────────────────────────────────────
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   Future<void> loadDashboard() async {
     state = state.copyWith(status: AdminStatus.loading);
     try {
       final stats = await _repo.getDashboardStats();
       state = state.copyWith(
-        status:        AdminStatus.success,
-        recipeCount:   stats['recipes']  ?? 0,
-        workoutCount:  stats['workouts'] ?? 0,
-        userCount:     stats['users']    ?? 0,
+        status:       AdminStatus.success,
+        recipeCount:  stats['recipes']  ?? 0,
+        workoutCount: stats['workouts'] ?? 0,
+        userCount:    stats['users']    ?? 0,
       );
     } catch (e) {
       state = state.copyWith(
@@ -48,7 +45,7 @@ class AdminViewModel extends StateNotifier<AdminState> {
     }
   }
 
-  // ── Lắng nghe recipes realtime ───────────────────────────────────────────
+  // ── Stream listeners ──────────────────────────────────────────────────────
   void _listenRecipes() {
     _recipesSub = _repo.watchRecipes().listen(
           (recipes) => state = state.copyWith(recipes: recipes),
@@ -56,38 +53,36 @@ class AdminViewModel extends StateNotifier<AdminState> {
     );
   }
 
-  // ── Chuyển tab ───────────────────────────────────────────────────────────
+  void _listenWorkouts() {
+    _workoutsSub = _repo.watchWorkouts().listen(
+          (workouts) => state = state.copyWith(workouts: workouts),
+      onError: (_) {},
+    );
+  }
+
+  // ── Tab navigation ────────────────────────────────────────────────────────
   void setAdminTab(AdminTab tab) =>
       state = state.copyWith(activeTab: tab);
 
   void setContentTab(ContentTab tab) =>
       state = state.copyWith(activeContentTab: tab);
 
-  // ── CRUD Recipes ─────────────────────────────────────────────────────────
-
+  // ── CRUD Recipes ──────────────────────────────────────────────────────────
   Future<void> addRecipe(RecipeModel recipe) async {
-    state = state.copyWith(status: AdminStatus.loading);
     try {
       await _repo.addRecipe(recipe);
-      state = state.copyWith(status: AdminStatus.success);
     } catch (e) {
       state = state.copyWith(
-        status: AdminStatus.error,
-        errorMessage: 'Thêm thất bại: $e',
-      );
+          status: AdminStatus.error, errorMessage: 'Thêm thất bại: $e');
     }
   }
 
   Future<void> updateRecipe(RecipeModel recipe) async {
-    state = state.copyWith(status: AdminStatus.loading);
     try {
       await _repo.updateRecipe(recipe);
-      state = state.copyWith(status: AdminStatus.success);
     } catch (e) {
       state = state.copyWith(
-        status: AdminStatus.error,
-        errorMessage: 'Cập nhật thất bại: $e',
-      );
+          status: AdminStatus.error, errorMessage: 'Cập nhật thất bại: $e');
     }
   }
 
@@ -96,15 +91,42 @@ class AdminViewModel extends StateNotifier<AdminState> {
       await _repo.deleteRecipe(recipeId);
     } catch (e) {
       state = state.copyWith(
-        status: AdminStatus.error,
-        errorMessage: 'Xóa thất bại: $e',
-      );
+          status: AdminStatus.error, errorMessage: 'Xóa thất bại: $e');
+    }
+  }
+
+  // ── CRUD Workouts ─────────────────────────────────────────────────────────
+  Future<void> addWorkout(WorkoutModel workout) async {
+    try {
+      await _repo.addWorkout(workout);
+    } catch (e) {
+      state = state.copyWith(
+          status: AdminStatus.error, errorMessage: 'Thêm thất bại: $e');
+    }
+  }
+
+  Future<void> updateWorkout(WorkoutModel workout) async {
+    try {
+      await _repo.updateWorkout(workout);
+    } catch (e) {
+      state = state.copyWith(
+          status: AdminStatus.error, errorMessage: 'Cập nhật thất bại: $e');
+    }
+  }
+
+  Future<void> deleteWorkout(String workoutId) async {
+    try {
+      await _repo.deleteWorkout(workoutId);
+    } catch (e) {
+      state = state.copyWith(
+          status: AdminStatus.error, errorMessage: 'Xóa thất bại: $e');
     }
   }
 
   @override
   void dispose() {
     _recipesSub?.cancel();
+    _workoutsSub?.cancel();
     super.dispose();
   }
 }
