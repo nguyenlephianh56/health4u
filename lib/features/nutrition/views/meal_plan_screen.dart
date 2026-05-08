@@ -1,13 +1,4 @@
-<<<<<<< HEAD
-import 'package:flutter/src/widgets/framework.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MealPlanScreen extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // TODO: implement build
-    throw UnimplementedError();
-=======
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -292,6 +283,5 @@ class MealPlanScreen extends ConsumerWidget {
         ),
       ),
     );
->>>>>>> cbdb0e906fa011e9410d997baa7008146b1af5d4
   }
 }

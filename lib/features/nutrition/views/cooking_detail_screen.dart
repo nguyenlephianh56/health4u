@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 final selectedTabProvider = StateProvider<int>((ref) => 0); // 0: Nguyên liệu, 1: Các bước, 2: Mẹo
 final mealCompletedProvider = StateProvider<bool>((ref) => false);

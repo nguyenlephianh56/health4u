@@ -12,8 +12,8 @@ import '../features/admin/views/admin_dashboard_screen.dart';
 
 // TODO: Bỏ comment từng dòng khi màn hình thật sẵn sàng
 // import '../features/home/views/home_screen.dart';
-// import '../features/nutrition/views/meal_plan_screen.dart';
-// import '../features/workout/views/workout_screen.dart';
+import '../features/nutrition/views/meal_plan_screen.dart';
+import '../features/workout/views/workout_schedule_screen.dart';
 // import '../features/grocery/views/grocery_screen.dart';
 import '../features/profile/views/profile_screen.dart';
 
@@ -125,12 +125,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.meals,
             pageBuilder: (c, s) =>
-                _fadePage(s, const _ComingSoonScreen(title: 'Meals')),
+                _fadePage(s, const MealPlanScreen()),
           ),
           GoRoute(
             path: AppRoutes.workout,
             pageBuilder: (c, s) =>
-                _fadePage(s, const _ComingSoonScreen(title: 'Workout')),
+                _fadePage(s, const WorkoutScheduleScreen()),
           ),
           GoRoute(
             path: AppRoutes.grocery,
