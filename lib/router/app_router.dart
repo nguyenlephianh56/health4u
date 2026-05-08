@@ -15,7 +15,7 @@ import '../features/admin/views/admin_dashboard_screen.dart';
 // import '../features/nutrition/views/meal_plan_screen.dart';
 // import '../features/workout/views/workout_screen.dart';
 // import '../features/grocery/views/grocery_screen.dart';
-// import '../features/profile/views/profile_screen.dart';
+import '../features/profile/views/profile_screen.dart';
 
 import '../data/repositories/auth_repo.dart';
 import '../data/repositories/auth_state_model.dart';
@@ -140,7 +140,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.profile,
             pageBuilder: (c, s) =>
-                _fadePage(s, const _ComingSoonScreen(title: 'Profile')),
+                _fadePage(s, const ProfileScreen()),
           ),
           GoRoute(
             path: AppRoutes.admin,
