@@ -203,10 +203,11 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
     final ingredients = _ingredientCtrls
         .where((c) => c.nameCtrl.text.trim().isNotEmpty)
         .map((c) => IngredientItem(
-      id:     _uuid.v4(),
-      name:   c.nameCtrl.text.trim(),
-      amount: double.tryParse(c.amountCtrl.text) ?? 0,
-      unit:   c.unitCtrl.text.trim(),
+      id:       _uuid.v4(),
+      name:     c.nameCtrl.text.trim(),
+      amount:   double.tryParse(c.amountCtrl.text) ?? 0,
+      unit:     c.unitCtrl.text.trim(),
+      category: IngredientCategoryX.fromValue(c.categoryValue),
     ))
         .toList();
 
@@ -737,15 +738,21 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
   }
 
   Widget _buildIngredientsSection() {
+    // Danh sách tất cả category để hiện trong dropdown
+    const categories = IngredientCategory.values;
+
     return Column(
       children: [
+        // Header — thêm cột Loại
         const Row(
           children: [
             Expanded(flex: 3, child: _ColHeader(label: 'Tên nguyên liệu')),
-            SizedBox(width: 8),
+            SizedBox(width: 6),
             Expanded(flex: 2, child: _ColHeader(label: 'Số lượng')),
-            SizedBox(width: 8),
+            SizedBox(width: 6),
             Expanded(flex: 2, child: _ColHeader(label: 'Đơn vị')),
+            SizedBox(width: 6),
+            Expanded(flex: 3, child: _ColHeader(label: 'Loại')),
             SizedBox(width: 36),
           ],
         ),
@@ -756,20 +763,23 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
+                // Tên nguyên liệu
                 Expanded(
                   flex: 3,
                   child: TextFormField(
-                    key: ValueKey('ing_name_$i'),
+                    key: ValueKey('ing_name_\$i'),
                     controller: ing.nameCtrl,
                     style: const TextStyle(fontSize: 13),
                     enableIMEPersonalizedLearning: true,
                     decoration: _inputDecoration(hint: 'VD: Gạo'),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                // Số lượng
                 Expanded(
                   flex: 2,
                   child: TextFormField(
+                    key: ValueKey('ing_amount_\$i'),
                     controller: ing.amountCtrl,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -779,17 +789,59 @@ class _RecipeFormDialogState extends State<RecipeFormDialog> {
                     decoration: _inputDecoration(hint: '100'),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                // Đơn vị
                 Expanded(
                   flex: 2,
                   child: TextFormField(
-                    key: ValueKey('ing_unit_$i'),
+                    key: ValueKey('ing_unit_\$i'),
                     controller: ing.unitCtrl,
                     style: const TextStyle(fontSize: 13),
                     enableIMEPersonalizedLearning: true,
-                    decoration: _inputDecoration(hint: 'g / ml / cái'),
+                    decoration: _inputDecoration(hint: 'g / ml'),
                   ),
                 ),
+                const SizedBox(width: 6),
+                // ✅ Dropdown chọn loại nguyên liệu
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: ing.categoryValue,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                            size: 16),
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500),
+                        items: categories.map((cat) {
+                          return DropdownMenuItem(
+                            value: cat.value,
+                            child: Text(
+                              cat.label,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => ing.categoryValue = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                // Nút xóa
                 if (_ingredientCtrls.length > 1)
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline,
@@ -1113,24 +1165,29 @@ class _IngredientControllers {
   final TextEditingController nameCtrl;
   final TextEditingController amountCtrl;
   final TextEditingController unitCtrl;
+  // category không dùng TextEditingController mà dùng String value
+  String categoryValue;
 
   _IngredientControllers({
     required this.nameCtrl,
     required this.amountCtrl,
     required this.unitCtrl,
+    this.categoryValue = 'other',
   });
 
   factory _IngredientControllers.empty() => _IngredientControllers(
-    nameCtrl:   TextEditingController(),
-    amountCtrl: TextEditingController(),
-    unitCtrl:   TextEditingController(),
+    nameCtrl:      TextEditingController(),
+    amountCtrl:    TextEditingController(),
+    unitCtrl:      TextEditingController(),
+    categoryValue: 'other',
   );
 
   factory _IngredientControllers.fromIngredient(IngredientItem ing) =>
       _IngredientControllers(
-        nameCtrl:   TextEditingController(text: ing.name),
-        amountCtrl: TextEditingController(text: ing.amount.toString()),
-        unitCtrl:   TextEditingController(text: ing.unit),
+        nameCtrl:      TextEditingController(text: ing.name),
+        amountCtrl:    TextEditingController(text: ing.amount.toString()),
+        unitCtrl:      TextEditingController(text: ing.unit),
+        categoryValue: ing.category.value,
       );
 
   void dispose() {

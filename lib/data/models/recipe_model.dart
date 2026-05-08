@@ -3,35 +3,86 @@
 // Mô tả: Data class ánh xạ document từ Firestore collection "recipes".
 // Dùng ở: AdminViewModel, NutritionViewModel, MealPlanScreen.
 
+enum IngredientCategory {
+  meat,       // 🥩 Thịt & Hải sản
+  vegetable,  // 🥦 Rau & Củ quả
+  dairy,      // 🥛 Sữa & Trứng
+  grain,      // 🌾 Ngũ cốc & Tinh bột
+  seasoning,  // 🧂 Gia vị & Dầu ăn
+  other,      // 📦 Khác
+}
+
+extension IngredientCategoryX on IngredientCategory {
+  String get label {
+    switch (this) {
+      case IngredientCategory.meat:      return '🥩 Thịt & Hải sản';
+      case IngredientCategory.vegetable: return '🥦 Rau & Củ quả';
+      case IngredientCategory.dairy:     return '🥛 Sữa & Trứng';
+      case IngredientCategory.grain:     return '🌾 Ngũ cốc & Tinh bột';
+      case IngredientCategory.seasoning: return '🧂 Gia vị & Dầu ăn';
+      case IngredientCategory.other:     return '📦 Khác';
+    }
+  }
+
+  // Lưu vào Firestore dạng String
+  String get value {
+    switch (this) {
+      case IngredientCategory.meat:      return 'meat';
+      case IngredientCategory.vegetable: return 'vegetable';
+      case IngredientCategory.dairy:     return 'dairy';
+      case IngredientCategory.grain:     return 'grain';
+      case IngredientCategory.seasoning: return 'seasoning';
+      case IngredientCategory.other:     return 'other';
+    }
+  }
+
+  // Đọc từ Firestore String → enum
+  static IngredientCategory fromValue(String? value) {
+    switch (value) {
+      case 'meat':      return IngredientCategory.meat;
+      case 'vegetable': return IngredientCategory.vegetable;
+      case 'dairy':     return IngredientCategory.dairy;
+      case 'grain':     return IngredientCategory.grain;
+      case 'seasoning': return IngredientCategory.seasoning;
+      default:          return IngredientCategory.other;
+    }
+  }
+}
+
 class IngredientItem {
   final String id;
   final String name;
   final double amount;
   final String unit;
+  // ✅ Thêm field category để phân nhóm trong Grocery List
+  final IngredientCategory category;
 
   const IngredientItem({
     required this.id,
     required this.name,
     required this.amount,
     required this.unit,
+    this.category = IngredientCategory.other, // mặc định "Khác"
   });
 
   // Firestore → Model
   factory IngredientItem.fromMap(Map<String, dynamic> map) {
     return IngredientItem(
-      id:     map['id']?.toString() ?? '',
-      name:   map['name']?.toString() ?? '',
-      amount: (map['amount'] as num?)?.toDouble() ?? 0,
-      unit:   map['unit']?.toString() ?? '',
+      id:       map['id']?.toString() ?? '',
+      name:     map['name']?.toString() ?? '',
+      amount:   (map['amount'] as num?)?.toDouble() ?? 0,
+      unit:     map['unit']?.toString() ?? '',
+      category: IngredientCategoryX.fromValue(map['category']?.toString()),
     );
   }
 
   // Model → Firestore
   Map<String, dynamic> toMap() => {
-    'id':     id,
-    'name':   name,
-    'amount': amount,
-    'unit':   unit,
+    'id':       id,
+    'name':     name,
+    'amount':   amount,
+    'unit':     unit,
+    'category': category.value, // lưu string vào Firestore
   };
 }
 
