@@ -16,9 +16,26 @@ import '../../../data/repositories/auth_repo.dart';
 import 'profile_state.dart';
 
 // ─── Provider ────────────────────────────────────────────────────────────────
+// ✅ FIX: Dùng StreamProvider lắng nghe Firebase Auth stream
+// Mỗi khi user thay đổi (login/logout) → provider tự rebuild
+// → ProfileViewModel tạo mới → loadProfile() gọi lại → hiện đúng tên
 final profileViewModelProvider =
 StateNotifierProvider<ProfileViewModel, ProfileState>((ref) {
-  return ProfileViewModel(ref);
+  final vm = ProfileViewModel(ref);
+
+  // Lắng nghe authRepoProvider — khi userId thay đổi → reload profile
+  ref.listen(authRepoProvider, (previous, next) {
+    // Chỉ reload khi userId thực sự thay đổi (tránh reload thừa)
+    if (previous?.userId != next.userId && next.userId != null) {
+      vm.loadProfile();
+    }
+    // User vừa logout → reset state về initial
+    if (next.isUnauthenticated || next.isOnboarding) {
+      vm.resetState();
+    }
+  });
+
+  return vm;
 });
 
 // ─── ViewModel ───────────────────────────────────────────────────────────────
@@ -29,6 +46,11 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
 
   ProfileViewModel(this._ref) : super(const ProfileState()) {
     loadProfile();
+  }
+
+  // Reset state về initial (dùng khi logout)
+  void resetState() {
+    state = const ProfileState();
   }
 
   // ── Load dữ liệu ban đầu ─────────────────────────────────────────────────
