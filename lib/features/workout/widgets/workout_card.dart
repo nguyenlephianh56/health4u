@@ -1,100 +1,206 @@
 import 'package:flutter/material.dart';
-// ĐÃ SỬA: Đường dẫn import chính xác để không bị lỗi "getter isn't defined"
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
+import 'package:health4u/features/workout/viewmodels/workout_date_provider.dart';
 
-class WorkoutCard extends StatelessWidget {
+class WorkoutCard extends ConsumerWidget {
   const WorkoutCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    const Color bgColor = Color(0xFF0C7ABF);
+    final Color cardColor = Colors.white.withOpacity(0.2);
+
+    final selectedDate = ref.watch(selectedWorkoutDateProvider);
+    final today = DateTime.now().toDate();
+
+    // Tạo danh sách 7 ngày bắt đầu từ thứ 2 của tuần hiện tại
+    final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+    final days = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
+
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+      decoration: const BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(30),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Banner ảnh bài tập
-          Container(
-            height: 160,
-            decoration: const BoxDecoration(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              color: Colors.black12, // Placeholder
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.local_fire_department, color: AppColors.surface, size: 16),
-                        SizedBox(width: 4),
-                        Text('HIT', style: TextStyle(color: AppColors.surface, fontWeight: FontWeight.bold)), // ĐÃ SỬA: 'HIIT' thành 'HIT'
-                      ],
-                    ),
-                  ),
-                )
-              ],
+          // --- Tiêu đề ---
+          const Text(
+            'Weekly Workout',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Monday HIT Blast', // ĐÃ SỬA: 'HIIT' thành 'HIT'
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.text),
+          const SizedBox(height: 6),
+          Text(
+            'Your personalized training schedule',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // --- 3 Thẻ thống kê ---
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  cardColor: cardColor,
+                  icon: const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
+                  value: '250m',
+                  label: 'Total Time',
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.timer_outlined, size: 16, color: AppColors.text.withOpacity(0.6)),
-                    const SizedBox(width: 4),
-                    Text('30 min', style: TextStyle(color: AppColors.text.withOpacity(0.6))),
-                    const SizedBox(width: 16),
-                    Icon(Icons.local_fire_department_outlined, size: 16, color: AppColors.text.withOpacity(0.6)),
-                    const SizedBox(width: 4),
-                    Text('310 cal', style: TextStyle(color: AppColors.text.withOpacity(0.6))),
-                    const SizedBox(width: 16),
-                    Icon(Icons.fitness_center_outlined, size: 16, color: AppColors.text.withOpacity(0.6)),
-                    const SizedBox(width: 4),
-                    Text('6 exercises', style: TextStyle(color: AppColors.text.withOpacity(0.6))),
-                  ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  cardColor: cardColor,
+                  icon: const Text('🔥', style: TextStyle(fontSize: 18)),
+                  value: '1650',
+                  label: 'Calories',
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'High-intensity intervals to ignite your metabolism and torch calories fast. Alternate between max effort and active recovery.',
-                  style: TextStyle(color: AppColors.text.withOpacity(0.6), height: 1.5),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  cardColor: cardColor,
+                  icon: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.lightGreen,
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text('View Workout', style: TextStyle(color: AppColors.surface, fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: const Icon(Icons.check, color: Colors.white, size: 14),
+                  ),
+                  value: '0/7',
+                  label: 'Done',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // --- Thanh ngày trong tuần (tích hợp bên trong card) ---
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: days.map((day) {
+              final isSelected = day == selectedDate;
+              final isToday = day == today;
+
+              return GestureDetector(
+                onTap: () {
+                  ref.read(selectedWorkoutDateProvider.notifier).state = day;
+                },
+                child: Container(
+                  width: 46,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white : cardColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Thứ (T2, T3...)
+                      Text(
+                        _getDayOfWeek(day),
+                        style: TextStyle(
+                          color: isSelected ? bgColor : Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Ngày trong tháng
+                      Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          color: isSelected ? bgColor : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      // Dấu chấm trắng nếu là hôm nay & không được chọn
+                      if (isToday && !isSelected)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          )
+              );
+            }).toList(),
+          ),
         ],
       ),
     );
   }
+
+  Widget _buildStatCard({
+    required Color cardColor,
+    required Widget icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(width: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getDayOfWeek(DateTime date) {
+    const days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    return days[date.weekday - 1];
+  }
+}
+
+// Extension tiện ích (có thể đặt riêng nếu muốn)
+extension DateOnly on DateTime {
+  DateTime toDate() => DateTime(year, month, day);
 }

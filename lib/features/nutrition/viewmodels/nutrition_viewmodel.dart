@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 // 1. Thêm Protein, Carbs, Fat vào State để giao diện có dữ liệu hiển thị
 class NutritionState {

@@ -1,7 +1,6 @@
 // lib/features/auth/viewmodels/info_setup_viewmodel.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import '../../../data/repositories/auth_repo.dart';
 import 'info_setup_state.dart';
 

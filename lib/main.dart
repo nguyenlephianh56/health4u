@@ -1,12 +1,10 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
-import 'router/app_router.dart';
+import 'router/app_router.dart';               // ✅ Import router provider
 import 'firebase_options.dart';
 
 void main() async {
@@ -22,14 +20,11 @@ class Health4UApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Lấy GoRouter từ provider — đã tích hợp auth guard tự động
-    final router = ref.watch(appRouterProvider);
+    final router = ref.watch(appRouterProvider);   // ✅ Sẽ nhận diện được
 
     return MaterialApp.router(
       title: 'Health4U',
       debugShowCheckedModeBanner: false,
-
-      // Bắt buộc để DatePicker + dialog hiển thị tiếng Việt
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -39,11 +34,7 @@ class Health4UApp extends ConsumerWidget {
         Locale('vi'),
         Locale('en'),
       ],
-
-      // Theme từ app_theme.dart
       theme: AppTheme.lightTheme,
-
-      // GoRouter config — thay cho onGenerateRoute
       routerConfig: router,
     );
   }
