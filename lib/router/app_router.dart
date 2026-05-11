@@ -11,7 +11,7 @@ import '../features/auth/views/info_setup_screen.dart';
 import '../features/admin/views/admin_dashboard_screen.dart';
 
 // TODO: Bỏ comment từng dòng khi màn hình thật sẵn sàng
-// import '../features/home/views/home_screen.dart';
+import '../features/home/views/home_screen.dart';
 import '../features/nutrition/views/meal_plan_screen.dart';
 import '../features/workout/views/workout_schedule_screen.dart';
 // import '../features/grocery/views/grocery_screen.dart';
@@ -120,7 +120,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.home,
             pageBuilder: (c, s) =>
-                _fadePage(s, const _TempHomeScreen()),
+                _fadePage(s, const HomeScreen()),
           ),
           GoRoute(
             path: AppRoutes.meals,

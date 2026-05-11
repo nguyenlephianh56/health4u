@@ -1,19 +1,4 @@
 // lib/data/repositories/auth_repo.dart
-//
-// Mô tả: Repository xử lý toàn bộ logic Firebase Auth + Firestore
-//        liên quan đến xác thực và phân quyền.
-//
-// Đây là tầng DATA — không import Widget nào của Flutter UI.
-//
-// Các lớp khác dùng auth_repo:
-//   → features/auth/viewmodels/auth_viewmodel.dart   : gọi login(), register()
-//   → features/auth/viewmodels/info_setup_viewmodel  : gọi saveUserInfo()
-//   → router/app_router.dart                         : lắng nghe authStateStream
-//
-// Vị trí đúng theo kiến trúc:
-//   lib/data/repositories/auth_repo.dart
-
-// lib/data/repositories/auth_repo.dart
 
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +8,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:intl/intl.dart';
 
 import 'auth_state_model.dart';
 
@@ -182,11 +168,22 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Chưa đăng nhập');
 
+    // ✅ Tạo history_bmi lần 0 (lần đăng ký ban đầu)
+    // Lần 0 = cân nặng gốc khi người dùng mới tạo tài khoản
+    // Lần 1, 2, 3... = các lần user tự cập nhật sau này
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final initialRecord = {
+      'measurement': 0,        // Lần 0 = cân nặng ban đầu khi đăng ký
+      'weight_kg':   weightKg,
+      'date':        today,
+    };
+
     await _db.collection('users').doc(uid).update({
       'height_cm':      heightCm,
       'weight_kg':      weightKg,
       'activity_level': activityLevel,
       'goal':           goal,
+      'history_bmi':    [initialRecord], // ← lần 0
     });
 
     await _loadUserState(uid);
