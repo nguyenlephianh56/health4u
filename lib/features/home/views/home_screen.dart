@@ -26,53 +26,61 @@ class HomeScreen extends ConsumerWidget {
         child: state.status == HomeStatus.loading && state.user == null
             ? const Center(
             child: CircularProgressIndicator(color: AppColors.primary))
-            : CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Greeting + streak
-                    _buildGreeting(state),
-                    const SizedBox(height: 20),
+            : RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: () async {
+            ref.invalidate(homeViewModelProvider);
+            await Future.delayed(const Duration(milliseconds: 800));
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. Greeting + streak
+                      _buildGreeting(state),
+                      const SizedBox(height: 20),
 
-                    // 2. Calo hôm nay
-                    CalorieRingWidget(
-                      consumedKcal:   state.consumedKcal,
-                      targetKcal:     state.targetKcal,
-                      protein:        state.protein,
-                      carbs:          state.carbs,
-                      fat:            state.fat,
-                      mealsCompleted: state.mealsCompleted,
-                    ),
-                    const SizedBox(height: 16),
+                      // 2. Calo hôm nay
+                      CalorieRingWidget(
+                        consumedKcal:   state.consumedKcal,
+                        targetKcal:     state.targetKcal,
+                        protein:        state.protein,
+                        carbs:          state.carbs,
+                        fat:            state.fat,
+                        mealsCompleted: state.mealsCompleted,
+                      ),
+                      const SizedBox(height: 16),
 
-                    // 3. BMI card (bấm được)
-                    BmiCardWidget(
-                      bmi:      state.bmi,
-                      bmiLabel: state.bmiLabel,
-                      onTap: () {
-                        // Reset BmiViewModel để load fresh data
-                        ref.invalidate(bmiViewModelProvider);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const BmiDetailScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
+                      // 3. BMI card (bấm được)
+                      BmiCardWidget(
+                        bmi:      state.bmi,
+                        bmiLabel: state.bmiLabel,
+                        onTap: () {
+                          // Reset BmiViewModel để load fresh data
+                          ref.invalidate(bmiViewModelProvider);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const BmiDetailScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
 
-                    // 4. Lộ trình hôm nay (placeholder)
-                    const TodayRoadmapWidget(),
-                  ],
+                      // 4. Lộ trình hôm nay (placeholder)
+                      const TodayRoadmapWidget(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
