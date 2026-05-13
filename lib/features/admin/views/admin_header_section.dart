@@ -97,7 +97,7 @@ class AdminStatsRow extends StatelessWidget {
           StatCard(
             emoji: '📖',
             count: state.recipeCount,
-            label: 'Recipes',
+            label: 'Món ăn',
             bgColor: const Color(0xFFE0F2FE),
             iconColor: AppColors.primary,
           ),
@@ -105,7 +105,7 @@ class AdminStatsRow extends StatelessWidget {
           StatCard(
             emoji: '🏋️',
             count: state.workoutCount,
-            label: 'Workouts',
+            label: 'Bài tập',
             bgColor: const Color(0xFFFFEDE0),
             iconColor: const Color(0xFFEA580C),
           ),
@@ -113,7 +113,7 @@ class AdminStatsRow extends StatelessWidget {
           StatCard(
             emoji: '👥',
             count: state.userCount,
-            label: 'Users',
+            label: 'Người dùng',
             bgColor: const Color(0xFFF0EEFF),
             iconColor: const Color(0xFF7C3AED),
           ),
@@ -145,12 +145,12 @@ class AdminMainTabBar extends StatelessWidget {
       child: Row(
         children: [
           AdminTabBtn(
-            label: '📋  Content',
+            label: '📋  Nội dung',
             isActive: state.activeTab == AdminTab.content,
             onTap: () => vm.setAdminTab(AdminTab.content),
           ),
           AdminTabBtn(
-            label: '👥  Users',
+            label: '👥  Người dùng',
             isActive: state.activeTab == AdminTab.users,
             onTap: () => vm.setAdminTab(AdminTab.users),
           ),

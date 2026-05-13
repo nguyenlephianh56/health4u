@@ -1,18 +1,11 @@
 // lib/data/repositories/admin_repo.dart
-//
-// Mô tả: Repository xử lý toàn bộ logic Firestore cho Admin.
-// Bao gồm: thống kê (recipes/workouts/users count) + CRUD recipes.
-//
-// Được gọi từ: features/admin/viewmodels/admin_viewmodel.dart
-// KHÔNG import Widget nào của Flutter UI.
-
-// lib/data/repositories/admin_repo.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/recipe_model.dart';
 import '../models/workout_model.dart';
+import '../models/admin_user_model.dart';
 
 final adminRepoProvider = Provider<AdminRepo>((ref) => AdminRepo());
 
@@ -82,5 +75,20 @@ class AdminRepo {
 
   Future<void> deleteWorkout(String workoutId) async {
     await _db.collection('workouts').doc(workoutId).delete();
+  }
+
+  // Users (Admin)
+  Future<List<AdminUserModel>> getAllUsers() async {
+    final snap = await _db
+        .collection('users')
+        .orderBy('name')
+        .get();
+    return snap.docs
+        .map((doc) => AdminUserModel.fromFirestore(doc.id, doc.data()))
+        .toList();
+  }
+
+  Future<void> deleteUser(String uid) async {
+    await _db.collection('users').doc(uid).delete();
   }
 }

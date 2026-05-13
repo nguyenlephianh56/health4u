@@ -24,31 +24,31 @@ class ShellScaffold extends ConsumerWidget {
   // ── Định nghĩa tất cả tab ───────────────────────────────────────────────
   static const _userTabs = <_TabItem>[
     _TabItem(
-      label: 'Home',
+      label: 'Trang chủ',
       icon: Icons.grid_view_outlined,
       activeIcon: Icons.grid_view_rounded,
       route: AppRoutes.home,
     ),
     _TabItem(
-      label: 'Meals',
+      label: 'Bữa ăn',
       icon: Icons.restaurant_menu_outlined,
       activeIcon: Icons.restaurant_menu_rounded,
       route: AppRoutes.meals,
     ),
     _TabItem(
-      label: 'Workout',
+      label: 'Tập luyện',
       icon: Icons.fitness_center_outlined,
       activeIcon: Icons.fitness_center_rounded,
       route: AppRoutes.workout,
     ),
     _TabItem(
-      label: 'Grocery',
+      label: 'Đi chợ',
       icon: Icons.shopping_cart_outlined,
       activeIcon: Icons.shopping_cart_rounded,
       route: AppRoutes.grocery,
     ),
     _TabItem(
-      label: 'Profile',
+      label: 'Cá nhân',
       icon: Icons.person_outline_rounded,
       activeIcon: Icons.person_rounded,
       route: AppRoutes.profile,

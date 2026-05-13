@@ -227,66 +227,6 @@ class _SplashScreen extends StatelessWidget {
   }
 }
 
-
-// ── Temp Home Screen — có nút logout để test ─────────────────────────────────
-// Xóa class này khi HomeScreen thật sẵn sàng
-class _TempHomeScreen extends ConsumerWidget {
-  const _TempHomeScreen();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE0F2FE),
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('🏠', style: TextStyle(fontSize: 56)),
-              const SizedBox(height: 12),
-              const Text(
-                'Home Screen',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0284C7),
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Đang phát triển...',
-                style: TextStyle(color: Colors.black45, fontSize: 14),
-              ),
-              const SizedBox(height: 40),
-
-              // ── Nút logout tạm thời ────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    await ref.read(authRepoProvider.notifier).signOut();
-                    // Router tự redirect về /login khi state = unauthenticated
-                  },
-                  icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Đăng xuất (tạm thời)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE53935),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Coming Soon (placeholder cho màn hình chưa làm) ──────────────────────────
 class _ComingSoonScreen extends StatelessWidget {
   final String title;

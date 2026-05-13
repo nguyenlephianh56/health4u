@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../data/models/recipe_model.dart';
 import '../../../data/models/workout_model.dart';
+import '../../../data/models/admin_user_model.dart';
 import '../../../data/repositories/admin_repo.dart';
 import 'admin_state.dart';
 
@@ -61,8 +62,13 @@ class AdminViewModel extends StateNotifier<AdminState> {
   }
 
   // ── Tab navigation ────────────────────────────────────────────────────────
-  void setAdminTab(AdminTab tab) =>
-      state = state.copyWith(activeTab: tab);
+  void setAdminTab(AdminTab tab) {
+    state = state.copyWith(activeTab: tab);
+    // Load users lần đầu khi chuyển sang tab Users
+    if (tab == AdminTab.users && state.allUsers.isEmpty) {
+      loadUsers();
+    }
+  }
 
   void setContentTab(ContentTab tab) =>
       state = state.copyWith(activeContentTab: tab);
@@ -120,6 +126,57 @@ class AdminViewModel extends StateNotifier<AdminState> {
     } catch (e) {
       state = state.copyWith(
           status: AdminStatus.error, errorMessage: 'Xóa thất bại: $e');
+    }
+  }
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+
+  Future<void> loadUsers() async {
+    try {
+      final users = await _repo.getAllUsers();
+      state = state.copyWith(
+        allUsers:      users,
+        filteredUsers: users, // Mặc định hiện tất cả
+      );
+    } catch (e) {
+      state = state.copyWith(
+        status:       AdminStatus.error,
+        errorMessage: 'Không thể tải users: $e',
+      );
+    }
+  }
+
+  /// Tìm kiếm user theo tên (không phân biệt hoa thường)
+  void searchUsers(String query) {
+    final q = query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? state.allUsers
+        : state.allUsers
+        .where((u) => u.name.toLowerCase().contains(q))
+        .toList();
+    state = state.copyWith(
+      searchQuery:   query,
+      filteredUsers: filtered,
+    );
+  }
+
+  Future<void> deleteUser(String uid) async {
+    try {
+      await _repo.deleteUser(uid);
+      // Xóa khỏi local list ngay sau khi thành công
+      final updated = state.allUsers.where((u) => u.id != uid).toList();
+      final filteredUpdated =
+      state.filteredUsers.where((u) => u.id != uid).toList();
+      state = state.copyWith(
+        allUsers:      updated,
+        filteredUsers: filteredUpdated,
+        userCount:     updated.length,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        status:       AdminStatus.error,
+        errorMessage: 'Xóa user thất bại: $e',
+      );
     }
   }
 

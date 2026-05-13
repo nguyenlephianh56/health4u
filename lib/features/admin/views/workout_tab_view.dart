@@ -84,7 +84,7 @@ class WorkoutTabView extends StatelessWidget {
       children: [
         // Nút Add New Workout
         _AddBtn(
-          label: 'Add New Workout',
+          label: 'Thêm bài tập mới',
           onTap: () => _openAddDialog(context),
         ),
         const SizedBox(height: 16),
@@ -92,7 +92,7 @@ class WorkoutTabView extends StatelessWidget {
         // Danh sách
         if (state.workouts.isEmpty)
           const _EmptyState(
-            message: 'Chưa có bài tập nào.\nBấm "Add New Workout" để thêm!',
+            message: 'Chưa có bài tập nào.\nBấm "Thêm bài tập" để thêm!',
           )
         else
           ...state.workouts.map(

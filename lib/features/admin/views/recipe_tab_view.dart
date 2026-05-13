@@ -84,7 +84,7 @@ class RecipeTabView extends StatelessWidget {
       children: [
         // Nút Add New Recipe
         _AddBtn(
-          label: 'Add New Recipe',
+          label: 'Thêm công thức mới',
           onTap: () => _openAddDialog(context),
         ),
         const SizedBox(height: 16),

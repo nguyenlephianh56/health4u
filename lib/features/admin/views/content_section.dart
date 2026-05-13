@@ -35,12 +35,12 @@ class ContentSection extends StatelessWidget {
           child: Row(
             children: [
               AdminSubTabBtn(
-                label: '🍽️  Recipes',
+                label: '🍽️  Công thức',
                 isActive: state.activeContentTab == ContentTab.recipes,
                 onTap: () => vm.setContentTab(ContentTab.recipes),
               ),
               AdminSubTabBtn(
-                label: '💪  Workouts',
+                label: '💪  Bài tập',
                 isActive: state.activeContentTab == ContentTab.workouts,
                 onTap: () => vm.setContentTab(ContentTab.workouts),
               ),
