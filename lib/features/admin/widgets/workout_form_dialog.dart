@@ -34,8 +34,10 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
   late final TextEditingController _durationCtrl;
 
   // ── State ────────────────────────────────────────────────────────────────
-  String _category   = 'Cardio';
-  String _difficulty = 'Beginner';
+  String _category      = 'Cardio';
+  String _difficulty    = 'Beginner';
+  String _muscleGroup   = 'Toàn thân';
+  late final TextEditingController _caloriesCtrl;
 
   // Image state
   File?  _pickedImageFile;
@@ -57,8 +59,11 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
     _durationCtrl = TextEditingController(
         text: w != null ? w.durationMin.toString() : '');
 
-    _category   = w?.category   ?? 'Cardio';
-    _difficulty = w?.difficulty ?? 'Beginner';
+    _category      = w?.category      ?? 'Cardio';
+    _difficulty    = w?.difficulty    ?? 'Beginner';
+    _muscleGroup   = w?.muscleGroup   ?? 'Toàn thân';
+    _caloriesCtrl  = TextEditingController(
+        text: w != null ? w.caloriesBurned.toString() : '');
     _imageUrl   = w?.imageUrl   ?? '';
 
     final existingExercises = w?.exercises ?? [];
@@ -73,6 +78,7 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
   void dispose() {
     _titleCtrl.dispose();
     _durationCtrl.dispose();
+    _caloriesCtrl.dispose();
     for (final c in _exerciseCtrls) c.dispose();
     super.dispose();
   }
@@ -154,11 +160,13 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
     }
 
     final workout = WorkoutModel(
-      id:          widget.workout?.id ?? '',
-      title:       _titleCtrl.text.trim(),
-      category:    _category,
-      difficulty:  _difficulty,
-      durationMin: int.tryParse(_durationCtrl.text) ?? 0,
+      id:             widget.workout?.id ?? '',
+      title:          _titleCtrl.text.trim(),
+      category:       _category,
+      difficulty:     _difficulty,
+      durationMin:    int.tryParse(_durationCtrl.text) ?? 0,
+      muscleGroup:    _muscleGroup,
+      caloriesBurned: int.tryParse(_caloriesCtrl.text) ?? 0,
       exercises:   exercises,
       imageUrl:    _imageUrl,
     );
@@ -235,6 +243,21 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
                       const SizedBox(height: 16),
 
                       // ── Duration ─────────────────────────────────────
+                      _sectionLabel('Nhóm cơ (Muscle Group)'),
+                      _buildMuscleGroupPicker(),
+                      const SizedBox(height: 16),
+
+                      _sectionLabel('Calo đốt được (kcal)'),
+                      _SimpleTextField(
+                        controller: _caloriesCtrl,
+                        hint: '300',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
                       _sectionLabel('Tổng thời gian (phút)'),
                       _SimpleTextField(
                         controller: _durationCtrl,
@@ -712,6 +735,44 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  static const _muscleGroups = [
+    'Ngực', 'Lưng', 'Chân', 'Vai', 'Tay', 'Cơ bụng', 'Toàn thân', 'Tim mạch',
+  ];
+
+  Widget _buildMuscleGroupPicker() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _muscleGroups.map((group) {
+        final isSelected = _muscleGroup == group;
+        return GestureDetector(
+          onTap: () => setState(() => _muscleGroup = group),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.primary : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary
+                    : Colors.black.withOpacity(0.1),
+              ),
+            ),
+            child: Text(
+              group,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.black87,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

@@ -37,9 +37,11 @@ class ExerciseItem {
 class WorkoutModel {
   final String id;          // Firestore document ID
   final String title;
-  final String category;    // "Cardio" | "Strength" | "Yoga"
-  final String difficulty;  // "Beginner" | "Intermediate" | "Advanced"
-  final int durationMin;
+  final String category;      // "Cardio" | "Strength" | "Yoga"
+  final String difficulty;    // "Beginner" | "Intermediate" | "Advanced"
+  final int    durationMin;
+  final String muscleGroup;   // "Ngực" | "Lưng" | "Chân" | ...
+  final int    caloriesBurned;
   final List<ExerciseItem> exercises;
   final String imageUrl;
 
@@ -49,6 +51,8 @@ class WorkoutModel {
     required this.category,
     required this.difficulty,
     required this.durationMin,
+    required this.muscleGroup,
+    required this.caloriesBurned,
     required this.exercises,
     required this.imageUrl,
   });
@@ -57,10 +61,12 @@ class WorkoutModel {
     return WorkoutModel(
       id:          docId,
       title:       data['title']?.toString() ?? '',
-      category:    data['category']?.toString() ?? 'Cardio',
-      difficulty:  data['difficulty']?.toString() ?? 'Beginner',
-      durationMin: (data['duration_min'] as num?)?.toInt() ?? 0,
-      exercises:   ((data['exercises'] as List?) ?? [])
+      category:       data['category']?.toString() ?? 'Cardio',
+      difficulty:     data['difficulty']?.toString() ?? 'Beginner',
+      durationMin:    (data['duration_min']     as num?)?.toInt() ?? 0,
+      muscleGroup:    data['muscle_group']?.toString() ?? 'Toàn thân',
+      caloriesBurned: (data['calories_burned']  as num?)?.toInt() ?? 0,
+      exercises:      ((data['exercises'] as List?) ?? [])
           .map((e) => ExerciseItem.fromMap(Map<String, dynamic>.from(e)))
           .toList(),
       imageUrl:    data['image_url']?.toString() ?? '',
@@ -69,10 +75,12 @@ class WorkoutModel {
 
   Map<String, dynamic> toFirestore() => {
     'title':        title,
-    'category':     category,
-    'difficulty':   difficulty,
-    'duration_min': durationMin,
-    'exercises':    exercises.map((e) => e.toMap()).toList(),
+    'category':        category,
+    'difficulty':      difficulty,
+    'duration_min':    durationMin,
+    'muscle_group':    muscleGroup,
+    'calories_burned': caloriesBurned,
+    'exercises':       exercises.map((e) => e.toMap()).toList(),
     'image_url':    imageUrl,
   };
 }

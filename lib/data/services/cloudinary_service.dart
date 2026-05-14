@@ -15,7 +15,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class CloudinaryService {
-  static const String _cloudName    = 'dfvtfibtx';    // ← thay tại đây
+  static const String _cloudName    = 'duqxpkwrf';    // ← thay tại đây
   static const String _uploadPreset = 'health4u_preset'; // ← thay tại đây
   static const String _folder       = 'health4u/recipes';   // ← thay nếu muốn
 
