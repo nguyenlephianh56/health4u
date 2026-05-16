@@ -12,9 +12,19 @@ class MealCard extends StatelessWidget {
     this.onSwapTap,
   });
 
+  static String _translateMealType(String type) {
+    switch (type.toUpperCase()) {
+      case 'BREAKFAST': return 'BỮA SÁNG';
+      case 'LUNCH':     return 'BỮA TRƯA';
+      case 'DINNER':    return 'BỮA TỐI';
+      case 'SNACK':     return 'BỮA PHỤ';
+      default:          return type;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String mealType = (meal['type'] ?? 'BREAKFAST').toString().toUpperCase();
+    final String mealType = _translateMealType((meal['type'] ?? 'BREAKFAST').toString());
     final String mealName = (meal['name'] ?? '').toString();
     final String mealTime = (meal['time'] ?? '20m').toString();
 
@@ -46,7 +56,7 @@ class MealCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image (thu nhỏ theo tỉ lệ ảnh mẫu)
+            // Image
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Container(

@@ -12,7 +12,12 @@
           "package_name": "com.example.health4u"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "927511023655-9mvbrm1unedlt9ld28e9ps54vsn22k6a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD-nU0g87x1-yLgbXTAcQfcYZUSEK8wppk"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "927511023655-9mvbrm1unedlt9ld28e9ps54vsn22k6a.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "927511023655-h1sv00jud8tt9c7k3sc986j7jf5ftpc6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.health4u"
+              }
+            }
+          ]
         }
       }
     }

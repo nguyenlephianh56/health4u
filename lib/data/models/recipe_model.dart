@@ -127,9 +127,18 @@ class RecipeFlags {
 
   factory RecipeFlags.fromMap(Map<String, dynamic> map) {
     return RecipeFlags(
-      isVegan:       (map['is_vegan']       as bool?) ?? false,
-      isVegetarian:  (map['is_vegetarian']  as bool?) ?? false,
+      isVegan:      _parseBool(map['is_vegan']),
+      isVegetarian: _parseBool(map['is_vegetarian']),
     );
+  }
+
+  // Xử lý an toàn: bool, int (0/1), String ("true"/"false"), null
+  static bool _parseBool(dynamic value) {
+    if (value == null)   return false;
+    if (value is bool)   return value;
+    if (value is int)    return value != 0;
+    if (value is String) return value.toLowerCase() == 'true';
+    return false;
   }
 
   Map<String, dynamic> toMap() => {

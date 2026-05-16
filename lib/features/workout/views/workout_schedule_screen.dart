@@ -13,29 +13,22 @@ class WorkoutScheduleScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Weekly Workout',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Your personalized training schedule',
-                style: TextStyle(color: AppColors.text.withOpacity(0.6)),
-              ),
-              const SizedBox(height: 20),
+              // WeeklyStatsCard tràn viền 2 bên, không padding ngang
               const WeeklyStatsCard(),
               const SizedBox(height: 24),
-              const WorkoutCard(),
-              const SizedBox(height: 24),
-              const ExercisesPreview(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    WorkoutCard(),
+                    SizedBox(height: 24),
+                    ExercisesPreview(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
