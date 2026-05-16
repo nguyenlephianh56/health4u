@@ -6,6 +6,7 @@ class ExerciseItem {
   final int sets;
   final int reps;
   final int restSec;
+  final String instruction; // Hướng dẫn chi tiết thực hiện
 
   const ExerciseItem({
     required this.id,
@@ -13,24 +14,27 @@ class ExerciseItem {
     required this.sets,
     required this.reps,
     required this.restSec,
+    this.instruction = '',
   });
 
   factory ExerciseItem.fromMap(Map<String, dynamic> map) {
     return ExerciseItem(
-      id:      map['id']?.toString() ?? '',
-      name:    map['name']?.toString() ?? '',
-      sets:    (map['sets'] as num?)?.toInt() ?? 0,
-      reps:    (map['reps'] as num?)?.toInt() ?? 0,
-      restSec: (map['rest_sec'] as num?)?.toInt() ?? 0,
+      id:          map['id']?.toString() ?? '',
+      name:        map['name']?.toString() ?? '',
+      sets:        (map['sets'] as num?)?.toInt() ?? 0,
+      reps:        (map['reps'] as num?)?.toInt() ?? 0,
+      restSec:     (map['rest_sec'] as num?)?.toInt() ?? 0,
+      instruction: map['instruction']?.toString() ?? '',
     );
   }
 
   Map<String, dynamic> toMap() => {
-    'id':       id,
-    'name':     name,
-    'sets':     sets,
-    'reps':     reps,
-    'rest_sec': restSec,
+    'id':          id,
+    'name':        name,
+    'sets':        sets,
+    'reps':        reps,
+    'rest_sec':    restSec,
+    'instruction': instruction,
   };
 }
 

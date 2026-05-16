@@ -146,11 +146,12 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
     final exercises = _exerciseCtrls
         .where((c) => c.nameCtrl.text.trim().isNotEmpty)
         .map((c) => ExerciseItem(
-      id:      _uuid.v4(),
-      name:    c.nameCtrl.text.trim(),
-      sets:    int.tryParse(c.setsCtrl.text) ?? 0,
-      reps:    int.tryParse(c.repsCtrl.text) ?? 0,
-      restSec: int.tryParse(c.restCtrl.text) ?? 0,
+      id:          _uuid.v4(),
+      name:        c.nameCtrl.text.trim(),
+      sets:        int.tryParse(c.setsCtrl.text) ?? 0,
+      reps:        int.tryParse(c.repsCtrl.text) ?? 0,
+      restSec:     int.tryParse(c.restCtrl.text) ?? 0,
+      instruction: c.instructionCtrl.text.trim(),
     ))
         .toList();
 
@@ -440,74 +441,101 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
         ...List.generate(_exerciseCtrls.length, (i) {
           final ex = _exerciseCtrls[i];
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Tên bài tập
-                Expanded(
-                  flex: 3,
-                  child: TextFormField(
-                    key: ValueKey('ex_name_$i'),
-                    controller: ex.nameCtrl,
-                    enableIMEPersonalizedLearning: true,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _inputDecoration(hint: 'VD: Squat'),
+                // ── Row: Tên | Sets | Reps | Rest | Xóa ─────────────
+                Row(
+                  children: [
+                    // Tên bài tập
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        key: ValueKey('ex_name_$i'),
+                        controller: ex.nameCtrl,
+                        enableIMEPersonalizedLearning: true,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: _inputDecoration(hint: 'VD: Squat'),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Sets
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        key: ValueKey('ex_sets_$i'),
+                        controller: ex.setsCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        style: const TextStyle(fontSize: 13),
+                        decoration: _inputDecoration(hint: '3'),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Reps
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        key: ValueKey('ex_reps_$i'),
+                        controller: ex.repsCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        style: const TextStyle(fontSize: 13),
+                        decoration: _inputDecoration(hint: '12'),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Rest seconds
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        key: ValueKey('ex_rest_$i'),
+                        controller: ex.restCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        style: const TextStyle(fontSize: 13),
+                        decoration: _inputDecoration(hint: '60'),
+                      ),
+                    ),
+                    // Nút xóa
+                    if (_exerciseCtrls.length > 1)
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline,
+                            color: Colors.redAccent, size: 20),
+                        onPressed: () => _removeExercise(i),
+                      )
+                    else
+                      const SizedBox(width: 36),
+                  ],
+                ),
+                // ── Hướng dẫn chi tiết ───────────────────────────────
+                const SizedBox(height: 6),
+                TextFormField(
+                  key: ValueKey('ex_instruction_$i'),
+                  controller: ex.instructionCtrl,
+                  enableIMEPersonalizedLearning: true,
+                  maxLines: 3,
+                  minLines: 2,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: _inputDecoration(
+                    hint: 'Hướng dẫn thực hiện... VD: Đứng thẳng, hạ người xuống từ từ, giữ lưng thẳng...',
+                  ).copyWith(
+                    hintMaxLines: 2,
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(left: 10, right: 6, top: 12),
+                      child: Icon(Icons.menu_book_rounded,
+                          color: AppColors.primary, size: 16),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(),
                   ),
                 ),
-                const SizedBox(width: 6),
-                // Sets
-                Expanded(
-                  flex: 1,
-                  child: TextFormField(
-                    key: ValueKey('ex_sets_$i'),
-                    controller: ex.setsCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _inputDecoration(hint: '3'),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Reps
-                Expanded(
-                  flex: 1,
-                  child: TextFormField(
-                    key: ValueKey('ex_reps_$i'),
-                    controller: ex.repsCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _inputDecoration(hint: '12'),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Rest seconds
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    key: ValueKey('ex_rest_$i'),
-                    controller: ex.restCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly
-                    ],
-                    style: const TextStyle(fontSize: 13),
-                    decoration: _inputDecoration(hint: '60'),
-                  ),
-                ),
-                // Nút xóa
-                if (_exerciseCtrls.length > 1)
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline,
-                        color: Colors.redAccent, size: 20),
-                    onPressed: () => _removeExercise(i),
-                  )
-                else
-                  const SizedBox(width: 36),
               ],
             ),
           );
@@ -927,27 +955,31 @@ class _ExerciseControllers {
   final TextEditingController setsCtrl;
   final TextEditingController repsCtrl;
   final TextEditingController restCtrl;
+  final TextEditingController instructionCtrl; // Hướng dẫn chi tiết
 
   _ExerciseControllers({
     required this.nameCtrl,
     required this.setsCtrl,
     required this.repsCtrl,
     required this.restCtrl,
+    required this.instructionCtrl,
   });
 
   factory _ExerciseControllers.empty() => _ExerciseControllers(
-    nameCtrl: TextEditingController(),
-    setsCtrl: TextEditingController(),
-    repsCtrl: TextEditingController(),
-    restCtrl: TextEditingController(),
+    nameCtrl:        TextEditingController(),
+    setsCtrl:        TextEditingController(),
+    repsCtrl:        TextEditingController(),
+    restCtrl:        TextEditingController(),
+    instructionCtrl: TextEditingController(),
   );
 
   factory _ExerciseControllers.fromExercise(ExerciseItem e) =>
       _ExerciseControllers(
-        nameCtrl: TextEditingController(text: e.name),
-        setsCtrl: TextEditingController(text: e.sets.toString()),
-        repsCtrl: TextEditingController(text: e.reps.toString()),
-        restCtrl: TextEditingController(text: e.restSec.toString()),
+        nameCtrl:        TextEditingController(text: e.name),
+        setsCtrl:        TextEditingController(text: e.sets.toString()),
+        repsCtrl:        TextEditingController(text: e.reps.toString()),
+        restCtrl:        TextEditingController(text: e.restSec.toString()),
+        instructionCtrl: TextEditingController(text: e.instruction),
       );
 
   void dispose() {
@@ -955,5 +987,6 @@ class _ExerciseControllers {
     setsCtrl.dispose();
     repsCtrl.dispose();
     restCtrl.dispose();
+    instructionCtrl.dispose();
   }
 }
