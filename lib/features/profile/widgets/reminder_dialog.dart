@@ -84,10 +84,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
               break;
             case 'Water':
               _waterEnabled = isActive;
-              // Thêm vào list nếu chưa có
-              if (_waterTimes.isEmpty) {
-                _waterTimes = [time];
-              }
+              _waterTimes = [time];
               break;
           }
         });

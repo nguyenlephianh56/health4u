@@ -1,6 +1,7 @@
 // lib/data/repositories/auth_repo.dart
 
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -190,7 +191,11 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
   }
 
   /// Đăng xuất — giữ hasSeenOnboarding = true → vào Login thẳng
+  final FlutterLocalNotificationsPlugin _notifications =
+  FlutterLocalNotificationsPlugin();
+
   Future<void> signOut() async {
+    await _notifications.cancelAll();
     await _auth.signOut();
   }
 
