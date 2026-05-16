@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
+import 'data/services/notification_service.dart';
 import 'router/app_router.dart';
 import 'firebase_options.dart';
 
@@ -14,6 +15,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // KHỞI TẠO THÔNG BÁO (Bắt buộc)
+  await NotificationService().init();
   runApp(const ProviderScope(child: Health4UApp()));
 }
 
