@@ -95,6 +95,8 @@ class AuthViewModel extends StateNotifier<AuthState> {
         'goal': null,
         'current_streak': 0,
         'total_points': 0,
+        'shield_count': 0,
+        'active_tag_name': '',
         'avatar_url': null,
         'created_at': FieldValue.serverTimestamp(),
       });

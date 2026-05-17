@@ -8,8 +8,8 @@ import '../viewmodels/profile_viewmodel.dart';
 import '../viewmodels/profile_state.dart';
 import '../widgets/profile_header_widget.dart';
 import '../widgets/goals_widget.dart';
+import '../widgets/reward_shop_preview_widget.dart';
 import '../widgets/streak_widget.dart';
-import '../widgets/theme_store_widget.dart';
 import '../widgets/how_to_earn_widget.dart';
 import '../widgets/settings_widget.dart';
 
@@ -22,11 +22,11 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(child: _buildBody(context, state)),
+      body: SafeArea(child: _buildBody(context, ref, state)),
     );
   }
 
-  Widget _buildBody(BuildContext context, ProfileState state) {
+  Widget _buildBody(BuildContext context, WidgetRef ref, ProfileState state) {
     if (state.status == ProfileStatus.loading && state.user == null) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primary),
@@ -54,7 +54,21 @@ class ProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   StreakWidget(user: state.user!),
                   const SizedBox(height: 16),
-                  ThemeStoreWidget(totalPoints: state.user!.totalPoints),
+
+                  // ── Reward Shop preview ──────────────────────────────────
+                  // Truyền ref xuống để widget tự navigate + refresh
+                  RewardShopPreviewWidget(
+                    uid: state.user!.id,
+                    onReturn: () {
+                      // Gọi refreshProfile() khi quay về từ RewardShopScreen
+                      // → Không gây loading giật, chỉ patch user trong state
+                      ref
+                          .read(profileViewModelProvider.notifier)
+                          .refreshProfile();
+                    },
+                  ),
+                  // ────────────────────────────────────────────────────────
+
                   const SizedBox(height: 16),
                   const HowToEarnWidget(),
                   const SizedBox(height: 16),

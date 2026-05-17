@@ -1,8 +1,4 @@
 // lib/features/profile/widgets/profile_header_widget.dart
-//
-// Widget phần đầu màn hình Profile:
-//   - Avatar (ảnh đại diện) + upload ảnh mới
-//   - Tên user + nút sửa tên
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -10,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
 import '../viewmodels/profile_viewmodel.dart';
-import '../viewmodels/profile_state.dart';
 
 class ProfileHeaderWidget extends ConsumerWidget {
   const ProfileHeaderWidget({super.key});
@@ -23,156 +18,144 @@ class ProfileHeaderWidget extends ConsumerWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, Color(0xFF0EA5E9)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppColors.primary,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: AppColors.primary.withOpacity(0.28),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Avatar ────────────────────────────────────────────────────
-          GestureDetector(
-            onTap: () => _pickAndUploadAvatar(context, vm),
-            child: Stack(
-              children: [
-                // Avatar circle
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.2),
-                    border: Border.all(
-                        color: Colors.white.withOpacity(0.5), width: 2),
-                  ),
-                  child: ClipOval(
-                    child: state.isUploadingAvatar
-                    // Đang upload → hiện spinner
-                        ? const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+          // ── Hàng avatar + tên ──────────────────────────────────────────
+          Row(
+            children: [
+              // Avatar
+              GestureDetector(
+                onTap: () => _pickAndUploadAvatar(context, vm),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.2),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.5), width: 2),
                       ),
-                    )
-                        : user?.avatarUrl != null &&
-                        user!.avatarUrl!.isNotEmpty
-                    // Có ảnh → hiện ảnh
-                        ? Image.network(
-                      user.avatarUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _defaultAvatar(),
-                    )
-                    // Không có ảnh → icon mặc định
-                        : _defaultAvatar(),
-                  ),
-                ),
-
-                // Camera icon overlay
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: AppColors.secondary,
-                      shape: BoxShape.circle,
+                      child: ClipOval(
+                        child: state.isUploadingAvatar
+                            ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          ),
+                        )
+                            : user?.avatarUrl != null &&
+                            user!.avatarUrl!.isNotEmpty
+                            ? Image.network(
+                          user.avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _defaultAvatar(),
+                        )
+                            : _defaultAvatar(),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.camera_alt_rounded,
-                      color: Colors.white,
-                      size: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // ── Tên + nút edit ────────────────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Label nhỏ
-                Text(
-                  'My Profile',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-
-                // Tên user
-                Text(
-                  user?.name ?? '...',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                // Nút sửa tên
-                GestureDetector(
-                  onTap: () => _showEditNameDialog(context, vm, user?.name ?? ''),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Edit name',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                    // Camera badge
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: const BoxDecoration(
+                          color: AppColors.secondary,
+                          shape: BoxShape.circle,
                         ),
+                        child: const Icon(Icons.camera_alt_rounded,
+                            color: Colors.white, size: 12),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '✏️',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 14),
+
+              // Tên + edit
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'My Profile',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.65),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      user?.name ?? '...',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    GestureDetector(
+                      onTap: () => _showEditNameDialog(
+                          context, vm, user?.name ?? ''),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Edit name',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.75),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.edit_rounded,
+                              size: 13,
+                              color: Colors.white.withOpacity(0.65)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+
+          // ── Hàng tag danh hiệu ─────────────────────────────────────────
+          const SizedBox(height: 14),
+          _TagRow(activeTagName: user?.activeTagName),
         ],
       ),
     );
   }
 
-  Widget _defaultAvatar() {
-    return const Icon(
-      Icons.person_rounded,
-      color: Colors.white,
-      size: 40,
-    );
-  }
+  Widget _defaultAvatar() => const Icon(
+    Icons.person_rounded,
+    color: Colors.white,
+    size: 36,
+  );
 
-  // ── Chọn ảnh và upload ───────────────────────────────────────────────────
   Future<void> _pickAndUploadAvatar(
       BuildContext context, ProfileViewModel vm) async {
     final picker = ImagePicker();
@@ -185,7 +168,6 @@ class ProfileHeaderWidget extends ConsumerWidget {
     await vm.uploadAvatar(File(picked.path));
   }
 
-  // ── Dialog sửa tên ───────────────────────────────────────────────────────
   void _showEditNameDialog(
       BuildContext context, ProfileViewModel vm, String currentName) {
     final ctrl = TextEditingController(text: currentName);
@@ -193,15 +175,12 @@ class ProfileHeaderWidget extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Sửa tên',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Sửa tên',
+            style: TextStyle(fontWeight: FontWeight.w700)),
         content: TextField(
           controller: ctrl,
-          enableIMEPersonalizedLearning: true,
           autofocus: true,
           decoration: InputDecoration(
             hintText: 'Nhập tên của bạn',
@@ -238,6 +217,87 @@ class ProfileHeaderWidget extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Widget hiển thị tag — tách riêng để dễ maintain ──────────────────────────
+class _TagRow extends StatelessWidget {
+  final String? activeTagName;
+
+  const _TagRow({this.activeTagName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(Icons.sell_outlined,
+            size: 14, color: Colors.white.withOpacity(0.55)),
+        const SizedBox(width: 8),
+        activeTagName != null && activeTagName!.isNotEmpty
+        // Có tag → pill nổi bật màu trắng mờ + dot secondary
+            ? Container(
+          padding: const EdgeInsets.fromLTRB(8, 5, 12, 5),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.35), width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Dot màu secondary làm điểm nhấn
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: AppColors.secondary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                activeTagName!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        )
+        // Chưa có tag → pill viền đứt nét, mờ, gợi ý trang bị
+            : Container(
+          padding: const EdgeInsets.fromLTRB(7, 5, 11, 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.3),
+              width: 0.5,
+              // Dart không có borderStyle dashed trực tiếp;
+              // dùng opacity thấp để gợi ý trạng thái trống
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_rounded,
+                  size: 13, color: Colors.white.withOpacity(0.4)),
+              const SizedBox(width: 4),
+              Text(
+                'Chưa trang bị danh hiệu',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

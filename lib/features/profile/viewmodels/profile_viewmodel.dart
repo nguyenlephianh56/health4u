@@ -1,7 +1,4 @@
 // lib/features/profile/viewmodels/profile_viewmodel.dart
-//
-// Vai trò MVVM: ViewModel — xử lý logic, gọi Firestore/Cloudinary
-// View KHÔNG gọi Firebase trực tiếp
 
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,21 +12,14 @@ import '../../../data/services/cloudinary_service.dart';
 import '../../../data/repositories/auth_repo.dart';
 import 'profile_state.dart';
 
-// ─── Provider ────────────────────────────────────────────────────────────────
-// ✅ FIX: Dùng StreamProvider lắng nghe Firebase Auth stream
-// Mỗi khi user thay đổi (login/logout) → provider tự rebuild
-// → ProfileViewModel tạo mới → loadProfile() gọi lại → hiện đúng tên
 final profileViewModelProvider =
 StateNotifierProvider<ProfileViewModel, ProfileState>((ref) {
   final vm = ProfileViewModel(ref);
 
-  // Lắng nghe authRepoProvider — khi userId thay đổi → reload profile
   ref.listen(authRepoProvider, (previous, next) {
-    // Chỉ reload khi userId thực sự thay đổi (tránh reload thừa)
     if (previous?.userId != next.userId && next.userId != null) {
       vm.loadProfile();
     }
-    // User vừa logout → reset state về initial
     if (next.isUnauthenticated || next.isOnboarding) {
       vm.resetState();
     }
@@ -38,7 +28,6 @@ StateNotifierProvider<ProfileViewModel, ProfileState>((ref) {
   return vm;
 });
 
-// ─── ViewModel ───────────────────────────────────────────────────────────────
 class ProfileViewModel extends StateNotifier<ProfileState> {
   final Ref _ref;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -48,34 +37,51 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     loadProfile();
   }
 
-  // Reset state về initial (dùng khi logout)
-  void resetState() {
-    state = const ProfileState();
+  void resetState() => state = const ProfileState();
+
+  // ── Load / Refresh ──────────────────────────────────────────────────────
+  // refreshProfile() dùng khi quay lại từ RewardShopScreen:
+  //   - Không set status → loading (tránh màn hình trắng giật)
+  //   - Chỉ fetch user doc rồi patch state.user tại chỗ
+  Future<void> refreshProfile() async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return;
+
+      final userDoc = await _db.collection('users').doc(uid).get();
+      if (!userDoc.exists) return;
+
+      final user = UserModel.fromFirestore(
+          uid, userDoc.data() as Map<String, dynamic>? ?? {});
+
+      // Chỉ patch user — giữ nguyên tracking, status, v.v.
+      state = state.copyWith(user: user);
+    } catch (_) {
+      // Silent fail — không làm gián đoạn UI
+    }
   }
 
-  // ── Load dữ liệu ban đầu ─────────────────────────────────────────────────
   Future<void> loadProfile() async {
     state = state.copyWith(status: ProfileStatus.loading);
     try {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Chưa đăng nhập');
 
-      // Load song song: user + daily_tracking hôm nay
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final results = await Future.wait([
         _db.collection('users').doc(uid).get(),
         _db.collection('daily_tracking').doc('${uid}_$today').get(),
       ]);
 
-      final userDoc    = results[0];
-      final trackDoc   = results[1];
+      final userDoc  = results[0];
+      final trackDoc = results[1];
 
       final user = UserModel.fromFirestore(
           uid, userDoc.data() as Map<String, dynamic>? ?? {});
 
       DailyTrackingData tracking = const DailyTrackingData();
       if (trackDoc.exists && trackDoc.data() != null) {
-        final d = trackDoc.data()!;
+        final d      = trackDoc.data()!;
         final macros = (d['macros'] as Map<String, dynamic>?) ?? {};
         final water  = (d['water']  as Map<String, dynamic>?) ?? {};
         tracking = DailyTrackingData(
@@ -102,42 +108,35 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     }
   }
 
-  // ── Cập nhật tên ─────────────────────────────────────────────────────────
+  // ── Cập nhật tên ──────────────────────────────────────────────────────────
   Future<void> updateName(String newName) async {
     if (newName.trim().isEmpty) return;
     state = state.copyWith(isSavingName: true);
     try {
       final uid = _auth.currentUser?.uid;
       if (uid == null) return;
-
       await _db.collection('users').doc(uid).update({'name': newName.trim()});
       await _auth.currentUser!.updateDisplayName(newName.trim());
-
       state = state.copyWith(
         isSavingName: false,
         user: state.user?.copyWith(name: newName.trim()),
       );
     } catch (e) {
       state = state.copyWith(
-        isSavingName:  false,
-        errorMessage:  'Không thể cập nhật tên: $e',
+        isSavingName: false,
+        errorMessage: 'Không thể cập nhật tên: $e',
       );
     }
   }
 
-  // ── Upload avatar: image_picker → Cloudinary → Firestore ─────────────────
+  // ── Upload avatar ──────────────────────────────────────────────────────────
   Future<void> uploadAvatar(File imageFile) async {
     state = state.copyWith(isUploadingAvatar: true);
     try {
-      // 1. Upload lên Cloudinary
       final url = await CloudinaryService.uploadImage(imageFile);
-
-      // 2. Lưu URL vào Firestore
       final uid = _auth.currentUser?.uid;
       if (uid == null) return;
       await _db.collection('users').doc(uid).update({'avatar_url': url});
-
-      // 3. Cập nhật state
       state = state.copyWith(
         isUploadingAvatar: false,
         user: state.user?.copyWith(avatarUrl: url),
@@ -150,9 +149,8 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     }
   }
 
-  // ── Đăng xuất ────────────────────────────────────────────────────────────
+  // ── Đăng xuất ─────────────────────────────────────────────────────────────
   Future<void> signOut() async {
     await _ref.read(authRepoProvider.notifier).signOut();
-    // AuthRepo tự emit unauthenticated → GoRouter redirect về /login
   }
 }
