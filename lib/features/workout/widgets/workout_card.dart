@@ -1,17 +1,17 @@
 // lib/features/workout/widgets/workout_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
 import '../viewmodels/workout_view_model.dart';
 import '../views/exercise_detail_screen.dart';
 
-class WorkoutCard extends ConsumerWidget {
-  const WorkoutCard({super.key});
+class WorkoutCard extends StatelessWidget {
+  final int dayIndex;
+  const WorkoutCard({super.key, required this.dayIndex});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final workout = ref.watch(currentWorkoutProvider);
+  Widget build(BuildContext context) {
+    final workout = weeklyWorkouts[dayIndex];
 
     return Container(
       decoration: BoxDecoration(

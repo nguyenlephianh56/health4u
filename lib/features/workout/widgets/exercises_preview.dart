@@ -1,16 +1,16 @@
 // lib/features/workout/widgets/exercises_preview.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
 import '../viewmodels/workout_view_model.dart';
 
-class ExercisesPreview extends ConsumerWidget {
-  const ExercisesPreview({super.key});
+class ExercisesPreview extends StatelessWidget {
+  final int dayIndex;
+  const ExercisesPreview({super.key, required this.dayIndex});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final workout = ref.watch(currentWorkoutProvider);
+  Widget build(BuildContext context) {
+    final workout = weeklyWorkouts[dayIndex];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

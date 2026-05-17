@@ -5,6 +5,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
 import '../viewmodels/workout_view_model.dart';
 
+// ── Real-time clock provider (tick mỗi phút để cập nhật ngày nếu qua nửa đêm)
+final _nowProvider = StreamProvider<DateTime>((ref) async* {
+  yield DateTime.now();
+  yield* Stream.periodic(
+    const Duration(minutes: 1),
+        (_) => DateTime.now(),
+  );
+});
+
+// ── Tính ngày thứ 2 của tuần hiện tại ────────────────────────────────────────
+/// Trả về DateTime của thứ 2 đầu tuần (tuần chứa [now])
+DateTime _mondayOf(DateTime now) {
+  return DateTime(now.year, now.month, now.day)
+      .subtract(Duration(days: now.weekday - 1));
+}
+
+/// Danh sách 7 ngày trong tuần (T2 → CN)
+List<DateTime> _weekDays(DateTime now) {
+  final monday = _mondayOf(now);
+  return List.generate(7, (i) => monday.add(Duration(days: i)));
+}
+
 class WeeklyStatsCard extends ConsumerWidget {
   const WeeklyStatsCard({super.key});
 
@@ -12,6 +34,12 @@ class WeeklyStatsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDay = ref.watch(selectedDayProvider);
     final stats       = ref.watch(weeklyStatsProvider);
+    final nowAsync    = ref.watch(_nowProvider);
+
+    final now   = nowAsync.value ?? DateTime.now();
+    final days  = _weekDays(now);
+    // index 0=T2...6=CN, weekday: 1=T2...7=CN
+    final todayIndex = (now.weekday - 1).clamp(0, 6);
 
     return Container(
       width: double.infinity,
@@ -75,14 +103,17 @@ class WeeklyStatsCard extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // ── Chọn ngày ─────────────────────────────────────────────────
+          // ── Chọn ngày (real-time) ─────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: List.generate(7, (i) {
               final workout    = weeklyWorkouts[i];
+              final day        = days[i];
               final isSelected = i == selectedDay;
-              final todayIndex = (DateTime.now().weekday - 1).clamp(0, 6);
               final isToday    = i == todayIndex;
+
+              // Tên thứ viết tắt
+              const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
               return GestureDetector(
                 onTap: () =>
@@ -90,7 +121,7 @@ class WeeklyStatsCard extends ConsumerWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(
-                      vertical: 10, horizontal: 8),
+                      vertical: 8, horizontal: 7),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.white
@@ -100,21 +131,36 @@ class WeeklyStatsCard extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Thứ viết tắt
                       Text(
-                        workout.dayShort,
+                        dayLabels[i],
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.primary
+                              : Colors.white.withOpacity(0.85),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      // Số ngày thật
+                      Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
                           color: isSelected
                               ? AppColors.primary
                               : Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
+                      // Emoji icon bài tập
                       Text(
                         workout.emoji,
-                        style: const TextStyle(fontSize: 16),
+                        style: const TextStyle(fontSize: 15),
                       ),
+                      // Dot indicator ngày hôm nay
                       if (isToday) ...[
                         const SizedBox(height: 3),
                         CircleAvatar(
@@ -136,6 +182,7 @@ class WeeklyStatsCard extends ConsumerWidget {
   }
 }
 
+// ── Stat Item ──────────────────────────────────────────────────────────────────
 class _StatItem extends StatelessWidget {
   final String icon;
   final String value;
