@@ -7,16 +7,23 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/plan_worker.dart';
 import 'router/app_router.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  // KHỞI TẠO THÔNG BÁO (Bắt buộc)
+
+  // Khởi tạo WorkManager — bắt buộc trước khi register bất kỳ task nào
+  await PlanWorkerService.initialize();
+
+  // Khởi tạo thông báo
   await NotificationService().init();
+
   runApp(const ProviderScope(child: Health4UApp()));
 }
 
