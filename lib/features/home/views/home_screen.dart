@@ -30,6 +30,7 @@ class HomeScreen extends ConsumerWidget {
           color: AppColors.primary,
           onRefresh: () async {
             ref.invalidate(homeViewModelProvider);
+            ref.invalidate(todayRoadmapProvider);
             await Future.delayed(const Duration(milliseconds: 800));
           },
           child: CustomScrollView(
