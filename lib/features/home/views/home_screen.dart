@@ -45,15 +45,8 @@ class HomeScreen extends ConsumerWidget {
                       _buildGreeting(state),
                       const SizedBox(height: 20),
 
-                      // 2. Calo hôm nay
-                      CalorieRingWidget(
-                        consumedKcal:   state.consumedKcal,
-                        targetKcal:     state.targetKcal,
-                        protein:        state.protein,
-                        carbs:          state.carbs,
-                        fat:            state.fat,
-                        mealsCompleted: state.mealsCompleted,
-                      ),
+                      // 2. Calo hôm nay — tự watch HomeState, không cần param
+                      const CalorieRingWidget(),
                       const SizedBox(height: 16),
 
                       // 3. BMI card (bấm được)
@@ -61,7 +54,6 @@ class HomeScreen extends ConsumerWidget {
                         bmi:      state.bmi,
                         bmiLabel: state.bmiLabel,
                         onTap: () {
-                          // Reset BmiViewModel để load fresh data
                           ref.invalidate(bmiViewModelProvider);
                           Navigator.push(
                             context,
@@ -73,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // 4. Lộ trình hôm nay (placeholder)
+                      // 4. Lộ trình hôm nay
                       const TodayRoadmapWidget(),
                     ],
                   ),
@@ -87,12 +79,11 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildGreeting(HomeState state) {
-    final now      = DateTime.now();
-    final dateStr  = DateFormat('EEEE, d MMMM', 'vi').format(now);
-    final name     = state.user?.name ?? '';
-    final streak   = state.user?.currentStreak ?? 0;
+    final now     = DateTime.now();
+    final dateStr = DateFormat('EEEE, d MMMM', 'vi').format(now);
+    final name    = state.user?.name ?? '';
+    final streak  = state.user?.currentStreak ?? 0;
 
-    // Lời chào theo thời gian
     String greeting;
     if (now.hour < 12) {
       greeting = 'Chào buổi sáng';
@@ -105,7 +96,6 @@ class HomeScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Ngày
         Text(
           dateStr,
           style: TextStyle(
@@ -116,7 +106,6 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
 
-        // Greeting + tên + streak
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -137,7 +126,6 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-            // Streak badge
             if (streak > 0)
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -149,8 +137,7 @@ class HomeScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('🔥',
-                        style: TextStyle(fontSize: 14)),
+                    const Text('🔥', style: TextStyle(fontSize: 14)),
                     const SizedBox(width: 4),
                     Text(
                       '$streak ngày',

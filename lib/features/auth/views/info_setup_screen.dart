@@ -8,6 +8,8 @@
 //   → VIEW: Chỉ lo UI + validate form + lắng nghe state
 //   → KHÔNG gọi Firestore trực tiếp
 //   → Gọi viewModel.saveInfo() khi user bấm "Hoàn tất"
+//   → Sau khi success → gọi WeeklyScheduler.onUserSetupComplete()
+//      để generate plan ngay + đăng ký WorkManager chạy định kỳ
 //
 // Widgets dùng (từ thư mục widgets/):
 //   - NumberInputField  → number_input_field.dart
@@ -23,6 +25,7 @@ import '../../../router/app_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../data/services/weekly_scheduler.dart';
 import '../viewmodels/info_setup_viewmodel.dart';
 import '../viewmodels/info_setup_state.dart';
 import '../widgets/number_input_field.dart';
@@ -78,6 +81,9 @@ class _InfoSetupScreenState extends ConsumerState<InfoSetupScreen>
   String? _selectedActivity;
   String? _selectedGoal;
 
+  // Guard chống gọi onUserSetupComplete() nhiều lần
+  bool _planGenerated = false;
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -130,9 +136,17 @@ class _InfoSetupScreenState extends ConsumerState<InfoSetupScreen>
     );
   }
 
-  // ── Lắng nghe state → điều hướng khi success ────────────────────────────
+  // ── Lắng nghe state → generate plan + điều hướng khi success ────────────
   void _listenState(InfoSetupState? prev, InfoSetupState next) {
-    if (next.status == InfoSetupStatus.success) {
+    if (next.status == InfoSetupStatus.success && !_planGenerated) {
+      _planGenerated = true; // Guard chống gọi lại
+
+      // Generate plan ngay + đăng ký WorkManager định kỳ
+      // Chạy bất đồng bộ, không block UI
+      WeeklyScheduler().onUserSetupComplete().catchError((e) {
+        debugPrint('[InfoSetup] Generate plan error: $e');
+      });
+
       // Hiện thông báo thành công → router tự vào home
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

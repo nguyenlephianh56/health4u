@@ -2,31 +2,115 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../viewmodels/home_viewmodel.dart';
+import '../viewmodels/home_state.dart';
 
-class CalorieRingWidget extends StatelessWidget {
-  final double consumedKcal;
-  final double targetKcal;
-  final double protein;
-  final double carbs;
-  final double fat;
-  final int    mealsCompleted;
+// ── Entry point: tự watch HomeState, không cần truyền param từ ngoài ─────────
+class CalorieRingWidget extends ConsumerStatefulWidget {
+  const CalorieRingWidget({super.key});
 
-  const CalorieRingWidget({
-    super.key,
-    required this.consumedKcal,
-    required this.targetKcal,
-    required this.protein,
-    required this.carbs,
-    required this.fat,
-    required this.mealsCompleted,
-  });
+  @override
+  ConsumerState<CalorieRingWidget> createState() => _CalorieRingWidgetState();
+}
 
-  double get _progress =>
-      targetKcal > 0 ? (consumedKcal / targetKcal).clamp(0.0, 1.0) : 0.0;
+class _CalorieRingWidgetState extends ConsumerState<CalorieRingWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animCtrl;
+  late Animation<double>   _progressAnim;
+
+  // Lưu prev values để animate từ → đến
+  double _prevRingProgress    = 0;
+  double _prevProteinProgress = 0;
+  double _prevCarbsProgress   = 0;
+  double _prevFatProgress     = 0;
+
+  // Animation riêng cho từng bar macro
+  late Animation<double> _proteinAnim;
+  late Animation<double> _carbsAnim;
+  late Animation<double> _fatAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _progressAnim  = _tweenAnim(0, 0);
+    _proteinAnim   = _tweenAnim(0, 0);
+    _carbsAnim     = _tweenAnim(0, 0);
+    _fatAnim       = _tweenAnim(0, 0);
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  Animation<double> _tweenAnim(double from, double to) {
+    return Tween<double>(begin: from, end: to).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
+    );
+  }
+
+  // Chạy tất cả animation khi state thay đổi
+  void _animateTo({
+    required double ring,
+    required double protein,
+    required double carbs,
+    required double fat,
+  }) {
+    _progressAnim  = _tweenAnim(_prevRingProgress,    ring);
+    _proteinAnim   = _tweenAnim(_prevProteinProgress, protein);
+    _carbsAnim     = _tweenAnim(_prevCarbsProgress,   carbs);
+    _fatAnim       = _tweenAnim(_prevFatProgress,      fat);
+
+    _prevRingProgress    = ring;
+    _prevProteinProgress = protein;
+    _prevCarbsProgress   = carbs;
+    _prevFatProgress     = fat;
+
+    _animCtrl.forward(from: 0);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(homeViewModelProvider);
+
+    // Tính progress từ Firebase data
+    final ringProgress    = state.targetKcal > 0
+        ? (state.consumedKcal  / state.targetKcal).clamp(0.0, 1.0) : 0.0;
+    final proteinProgress = state.protein > 0
+        ? (state.consumedProtein / state.protein).clamp(0.0, 1.0) : 0.0;
+    final carbsProgress   = state.carbs > 0
+        ? (state.consumedCarbs   / state.carbs).clamp(0.0, 1.0) : 0.0;
+    final fatProgress     = state.fat > 0
+        ? (state.consumedFat     / state.fat).clamp(0.0, 1.0) : 0.0;
+
+    // Trigger animation khi bất kỳ giá trị nào thay đổi
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final changed = (ringProgress    - _prevRingProgress).abs()    > 0.001 ||
+          (proteinProgress - _prevProteinProgress).abs() > 0.001 ||
+          (carbsProgress   - _prevCarbsProgress).abs()   > 0.001 ||
+          (fatProgress     - _prevFatProgress).abs()     > 0.001;
+      if (changed) {
+        _animateTo(
+          ring:    ringProgress,
+          protein: proteinProgress,
+          carbs:   carbsProgress,
+          fat:     fatProgress,
+        );
+      }
+    });
+
+    // Loading skeleton
+    if (state.status == HomeStatus.loading) {
+      return _buildSkeleton();
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -43,7 +127,7 @@ class CalorieRingWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ── Header ──────────────────────────────────────────────────────
           Row(
             children: [
               const Text('🔥', style: TextStyle(fontSize: 18)),
@@ -58,14 +142,13 @@ class CalorieRingWidget extends StatelessWidget {
               ),
               const Spacer(),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '$mealsCompleted/4 bữa xong',
+                  '${state.mealsCompleted}/4 bữa xong',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -77,78 +160,131 @@ class CalorieRingWidget extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Ring + macros
+          // ── Ring + Macros ────────────────────────────────────────────────
+          AnimatedBuilder(
+            animation: _animCtrl,
+            builder: (_, __) => Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Vòng tròn animate
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CustomPaint(
+                        size: const Size(120, 120),
+                        painter: _CalorieRingPainter(
+                          progress: _progressAnim.value,
+                        ),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            child: Text(
+                              state.consumedKcal.toInt().toString(),
+                              key: ValueKey(state.consumedKcal.toInt()),
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.text,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '/ ${state.targetKcal.toInt()}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.black.withOpacity(0.45),
+                            ),
+                          ),
+                          const Text(
+                            'kcal',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+
+                // Macro bars — luôn hiển thị, progress animate từ 0 lên khi hoàn thành bữa
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _MacroBar(
+                        label:    'Protein',
+                        value:    state.consumedProtein,
+                        target:   state.protein,
+                        progress: _proteinAnim.value,
+                        color:    const Color(0xFF0284C7),
+                      ),
+                      const SizedBox(height: 10),
+                      _MacroBar(
+                        label:    'Carbs',
+                        value:    state.consumedCarbs,
+                        target:   state.carbs,
+                        progress: _carbsAnim.value,
+                        color:    const Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(height: 10),
+                      _MacroBar(
+                        label:    'Chất béo',
+                        value:    state.consumedFat,
+                        target:   state.fat,
+                        progress: _fatAnim.value,
+                        color:    const Color(0xFFEA580C),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Loading skeleton
+  Widget _buildSkeleton() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
           Row(
             children: [
-              // Vòng tròn calo
-              SizedBox(
-                width: 120,
-                height: 120,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CustomPaint(
-                      size: const Size(120, 120),
-                      painter: _CalorieRingPainter(progress: _progress),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          consumedKcal.toInt().toString(),
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.text,
-                          ),
-                        ),
-                        Text(
-                          '/ ${targetKcal.toInt()}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.black.withOpacity(0.45),
-                          ),
-                        ),
-                        const Text(
-                          'kcal',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              _skeletonBox(80, 14),
+              const Spacer(),
+              _skeletonBox(80, 24, radius: 20),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _skeletonBox(120, 120, radius: 60),
               const SizedBox(width: 20),
-
-              // Macros
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _MacroRow(
-                      label: 'Protein',
-                      value: protein,
-                      target: _macroTarget('protein'),
-                      color: const Color(0xFF0284C7),
-                    ),
-                    const SizedBox(height: 10),
-                    _MacroRow(
-                      label: 'Carbs',
-                      value: carbs,
-                      target: _macroTarget('carbs'),
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    const SizedBox(height: 10),
-                    _MacroRow(
-                      label: 'Chất béo',
-                      value: fat,
-                      target: _macroTarget('fat'),
-                      color: const Color(0xFFEA580C),
-                    ),
+                    _skeletonBox(double.infinity, 10),
+                    const SizedBox(height: 16),
+                    _skeletonBox(double.infinity, 10),
+                    const SizedBox(height: 16),
+                    _skeletonBox(double.infinity, 10),
                   ],
                 ),
               ),
@@ -159,14 +295,15 @@ class CalorieRingWidget extends StatelessWidget {
     );
   }
 
-  // Target macro ước tính từ target calo
-  double _macroTarget(String type) {
-    switch (type) {
-      case 'protein': return (targetKcal * 0.25 / 4).roundToDouble();
-      case 'carbs':   return (targetKcal * 0.50 / 4).roundToDouble();
-      case 'fat':     return (targetKcal * 0.25 / 9).roundToDouble();
-      default:        return 0;
-    }
+  Widget _skeletonBox(double w, double h, {double radius = 6}) {
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
   }
 }
 
@@ -194,42 +331,36 @@ class _CalorieRingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    // Background circle
     canvas.drawCircle(Offset(cx, cy), r, bgPaint);
 
-    // Progress arc (start từ top = -π/2)
-    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
-    canvas.drawArc(
-      rect,
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      fgPaint,
-    );
+    if (progress > 0) {
+      final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
+      canvas.drawArc(rect, -pi / 2, 2 * pi * progress, false, fgPaint);
+    }
   }
 
   @override
   bool shouldRepaint(_CalorieRingPainter old) => old.progress != progress;
 }
 
-// ── 1 dòng macro ─────────────────────────────────────────────────────────────
-class _MacroRow extends StatelessWidget {
+// ── 1 dòng macro với animated progress bar ───────────────────────────────────
+class _MacroBar extends StatelessWidget {
   final String label;
-  final double value;
-  final double target;
+  final double value;     // consumed gram
+  final double target;    // target gram từ Firebase
+  final double progress;  // 0.0→1.0 đã được animate từ ngoài vào
   final Color  color;
 
-  const _MacroRow({
+  const _MacroBar({
     required this.label,
     required this.value,
     required this.target,
+    required this.progress,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = target > 0 ? (value / target).clamp(0.0, 1.0) : 0.0;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -245,6 +376,7 @@ class _MacroRow extends StatelessWidget {
               ),
             ),
             Text(
+              // Luôn hiện value/target kể cả khi chưa ăn (0/130g)
               '${value.toInt()}/${target.toInt()}g',
               style: TextStyle(
                 fontSize: 11,
@@ -257,7 +389,7 @@ class _MacroRow extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: progress,
+            value: progress,   // animated value từ AnimatedBuilder cha
             minHeight: 5,
             backgroundColor: Colors.black.withOpacity(0.07),
             valueColor: AlwaysStoppedAnimation<Color>(color),

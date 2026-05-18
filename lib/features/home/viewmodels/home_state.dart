@@ -12,23 +12,33 @@ class HomeState {
   // Calo hôm nay
   final double targetKcal;
   final double consumedKcal;
+
+  // Target macro — snapshot từ daily_tracking Firestore (tính lúc tạo plan)
   final double protein;
   final double carbs;
   final double fat;
+
+  // Consumed macro — cộng dồn khi user hoàn thành từng bữa
+  final double consumedProtein;
+  final double consumedCarbs;
+  final double consumedFat;
 
   // Số bữa đã hoàn thành hôm nay (0-4)
   final int mealsCompleted;
 
   const HomeState({
-    this.status         = HomeStatus.initial,
+    this.status           = HomeStatus.initial,
     this.errorMessage,
     this.user,
-    this.targetKcal     = 2000,
-    this.consumedKcal   = 0,
-    this.protein        = 0,
-    this.carbs          = 0,
-    this.fat            = 0,
-    this.mealsCompleted = 0,
+    this.targetKcal       = 2000,
+    this.consumedKcal     = 0,
+    this.protein          = 0,
+    this.carbs            = 0,
+    this.fat              = 0,
+    this.consumedProtein  = 0,
+    this.consumedCarbs    = 0,
+    this.consumedFat      = 0,
+    this.mealsCompleted   = 0,
   });
 
   HomeState copyWith({
@@ -40,18 +50,24 @@ class HomeState {
     double?     protein,
     double?     carbs,
     double?     fat,
+    double?     consumedProtein,
+    double?     consumedCarbs,
+    double?     consumedFat,
     int?        mealsCompleted,
   }) {
     return HomeState(
-      status:         status         ?? this.status,
-      errorMessage:   errorMessage   ?? this.errorMessage,
-      user:           user           ?? this.user,
-      targetKcal:     targetKcal     ?? this.targetKcal,
-      consumedKcal:   consumedKcal   ?? this.consumedKcal,
-      protein:        protein        ?? this.protein,
-      carbs:          carbs          ?? this.carbs,
-      fat:            fat            ?? this.fat,
-      mealsCompleted: mealsCompleted ?? this.mealsCompleted,
+      status:          status          ?? this.status,
+      errorMessage:    errorMessage    ?? this.errorMessage,
+      user:            user            ?? this.user,
+      targetKcal:      targetKcal      ?? this.targetKcal,
+      consumedKcal:    consumedKcal    ?? this.consumedKcal,
+      protein:         protein         ?? this.protein,
+      carbs:           carbs           ?? this.carbs,
+      fat:             fat             ?? this.fat,
+      consumedProtein: consumedProtein ?? this.consumedProtein,
+      consumedCarbs:   consumedCarbs   ?? this.consumedCarbs,
+      consumedFat:     consumedFat     ?? this.consumedFat,
+      mealsCompleted:  mealsCompleted  ?? this.mealsCompleted,
     );
   }
 
@@ -82,7 +98,5 @@ class HomeState {
     return 'Béo phì';
   }
 
-  // BMI tính từ users.weight_kg + users.height_cm
-  // Cùng logic với BmiState.bmi → luôn hiển thị đúng trên cả HomeScreen và BmiDetailScreen
   bool get hasBmi => bmi != null;
 }
