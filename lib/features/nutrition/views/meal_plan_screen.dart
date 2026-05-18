@@ -1,20 +1,86 @@
+// lib/features/nutrition/views/meal_plan_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/models/recipe_model.dart';
 import '../viewmodels/nutrition_viewmodel.dart';
 import '../widgets/meal_card.dart';
-import '../widgets/nutrition_label.dart';
 
-class MealPlanScreen extends ConsumerWidget {
+class MealPlanScreen extends ConsumerStatefulWidget {
   const MealPlanScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MealPlanScreen> createState() => _MealPlanScreenState();
+}
+
+class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+
+  final ScrollController _calendarScrollController = ScrollController();
+  static const double _itemWidth = 58.0;
+  bool _slideFromRight = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _buildAnimations(fromRight: true);
+    _animController.forward();
+  }
+
+  void _buildAnimations({required bool fromRight}) {
+    _slideAnimation = Tween<Offset>(
+      begin: Offset(fromRight ? 1.0 : -1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    );
+  }
+
+  void _onDaySelected(int newIndex) {
+    final currentIndex = ref.read(selectedDayIndexProvider);
+    if (newIndex == currentIndex) return;
+
+    _slideFromRight = newIndex > currentIndex;
+    _buildAnimations(fromRight: _slideFromRight);
+    _animController.forward(from: 0);
+    ref.read(selectedDayIndexProvider.notifier).state = newIndex;
+    _scrollCalendarTo(newIndex);
+  }
+
+  void _scrollCalendarTo(int index) {
+    final screenWidth = MediaQuery.of(context).size.width - 60;
+    final targetOffset =
+        (_itemWidth * index) - (screenWidth / 2) + (_itemWidth / 2);
+    _calendarScrollController.animateTo(
+      targetOffset.clamp(
+          0.0, _calendarScrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _calendarScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final nutritionState = ref.watch(nutritionViewModelProvider);
-    // 1. Lấy index ngày đang được chọn
-    final selectedIndex = ref.watch(selectedDayIndexProvider);
+    final selectedIndex  = ref.watch(selectedDayIndexProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -22,6 +88,7 @@ class MealPlanScreen extends ConsumerWidget {
         child: SingleChildScrollView(
           child: Column(
             children: [
+              // ── Header xanh ──────────────────────────────────────────────
               Container(
                 decoration: const BoxDecoration(
                   color: AppColors.primary,
@@ -29,35 +96,87 @@ class MealPlanScreen extends ConsumerWidget {
                     bottom: Radius.circular(30),
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                padding:
+                const EdgeInsets.fromLTRB(20, 25, 20, 12),
                 child: Column(
                   children: [
                     _buildHeader(),
-                    const SizedBox(height: 25),
-                    // 2. Truyền selectedIndex vào Calendar
-                    _buildCalendar(ref, selectedIndex),
+                    const SizedBox(height: 16),
+                    _buildCalendar(selectedIndex),
                   ],
                 ),
               ),
 
-              ListView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                children: [
-                  // 3. Truyền state và selectedIndex để Summary thay đổi theo ngày
-                  _buildDailySummary(nutritionState, selectedIndex),
-                  const SizedBox(height: 20),
-                  ...nutritionState.meals.map(
-                        (meal) => MealCard(
-                      meal: meal,
-                      onSwapTap: () {
-                        // Logic đổi món
-                      },
+              // ── Loading ───────────────────────────────────────────────────
+              if (nutritionState.isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 60),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else
+              // ── Nội dung với hiệu ứng ────────────────────────────────
+                SlideTransition(
+                  position: _slideAnimation,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      child: Column(
+                        children: [
+                          _buildDailySummary(nutritionState, selectedIndex),
+                          const SizedBox(height: 8),
+
+                          // ── Breakfast ───────────────────────────────────────
+                          if (nutritionState.breakfast.isNotEmpty) ...[
+                            ...nutritionState.breakfast.map(
+                                  (r) => MealCard(
+                                meal: _recipeToMap(r),
+                                onSwapTap: () {},
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // ── Lunch ───────────────────────────────────────────
+                          if (nutritionState.lunch.isNotEmpty) ...[
+                            ...nutritionState.lunch.map(
+                                  (r) => MealCard(
+                                meal: _recipeToMap(r),
+                                onSwapTap: () {},
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // ── Dinner ──────────────────────────────────────────
+                          if (nutritionState.dinner.isNotEmpty) ...[
+                            ...nutritionState.dinner.map(
+                                  (r) => MealCard(
+                                meal: _recipeToMap(r),
+                                onSwapTap: () {},
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // ── Snack ───────────────────────────────────────────
+                          if (nutritionState.snack.isNotEmpty) ...[
+                            ...nutritionState.snack.map(
+                                  (r) => MealCard(
+                                meal: _recipeToMap(r),
+                                onSwapTap: () {},
+                              ),
+                            ),
+                          ],
+
+                          // ── Empty state ─────────────────────────────────────
+                          if (nutritionState.allMeals.isEmpty)
+                            _buildEmptyState(),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
             ],
           ),
         ),
@@ -65,15 +184,29 @@ class MealPlanScreen extends ConsumerWidget {
     );
   }
 
+  // Chuyển RecipeModel → Map để MealCard dùng
+  Map<String, dynamic> _recipeToMap(RecipeModel r) => {
+    'type':         r.mealType.toUpperCase(),
+    'name':         r.name,
+    'cal':          r.nutrition.calories.round(),
+    'time':         '${r.prepTimeMin}m',
+    'protein':      '${r.nutrition.protein.round()}g',
+    'carb':         '${r.nutrition.carbs.round()}g',
+    'fat':          '${r.nutrition.fat.round()}g',
+    'image':        r.imageUrl,
+    'instructions': r.instructions,
+    'ingredients':  r.ingredients.map((i) => i.toMap()).toList(),
+  };
+
+  // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return const Row(
       children: [
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Weekly Meal Plan',
+              'Kế hoạch bữa ăn tuần',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -82,36 +215,25 @@ class MealPlanScreen extends ConsumerWidget {
             ),
             SizedBox(height: 4),
             Text(
-              'Week of May 3',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-              ),
+              'Tuần 3/5',
+              style: TextStyle(fontSize: 14, color: Colors.white70),
             ),
           ],
         ),
-        CircleAvatar(
-          backgroundColor: Colors.white,
-          child: Icon(
-            Icons.person,
-            color: AppColors.primary,
-          ),
-        )
       ],
     );
   }
 
-  // --- CẬP NHẬT TRUYỀN INDEX VÀ ĐỔI LOGIC DẤU CHẤM ---
-  Widget _buildCalendar(WidgetRef ref, int selectedIndex) {
-    final days = [
-      {'day': 'MON', 'date': '3'},
-      {'day': 'TUE', 'date': '4'},
-      {'day': 'WED', 'date': '5'},
-      {'day': 'THU', 'date': '6'},
-      {'day': 'FRI', 'date': '7'},
-      {'day': 'SAT', 'date': '8'},
-      {'day': 'SUN', 'date': '9'},
-    ];
+  // ── Lịch ngày (real-time theo tuần hiện tại) ────────────────────────────
+  Widget _buildCalendar(int selectedIndex) {
+    final now    = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final dayNames = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    final days = List.generate(7, (i) {
+      final d = monday.add(Duration(days: i));
+      return {'day': dayNames[i], 'date': '${d.day}'};
+    });
+    final todayIndex = now.weekday - 1; // 0=T2 ... 6=CN
 
     return Container(
       height: 80,
@@ -121,53 +243,57 @@ class MealPlanScreen extends ConsumerWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: ListView.builder(
+        controller: _calendarScrollController,
         scrollDirection: Axis.horizontal,
         itemCount: days.length,
         itemBuilder: (context, index) {
           final isSelected = index == selectedIndex;
-
-          // Mặc định THU (index 3) là hôm nay. Bạn có thể thay đổi sau nếu làm lịch thực tế.
-          final isToday = index == 3;
+          final isToday    = index == todayIndex;
 
           return GestureDetector(
-            onTap: () => ref.read(selectedDayIndexProvider.notifier).state = index,
+            onTap: () => _onDaySelected(index),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 4),
               width: 50,
+              height: 64,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.15),
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    days[index]['day']!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? AppColors.primary : Colors.white,
+              child: ClipRect(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      days[index]['day']!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? AppColors.primary : Colors.white,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    days[index]['date']!,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? AppColors.primary : Colors.white,
-                    ),
-                  ),
-                  // Dấu chấm CHỈ hiện ở ngày "Hôm nay"
-                  if (isToday) ...[
                     const SizedBox(height: 2),
-                    CircleAvatar(
-                      radius: 2.5,
-                      // Đổi màu tương phản với nền (nếu ô đang chọn nền trắng -> chấm xanh, ngược lại chấm trắng)
-                      backgroundColor: isSelected ? AppColors.primary : Colors.white,
+                    Text(
+                      days[index]['date']!,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? AppColors.primary : Colors.white,
+                      ),
                     ),
-                  ]
-                ],
+                    if (isToday) ...[
+                      const SizedBox(height: 3),
+                      CircleAvatar(
+                        radius: 2,
+                        backgroundColor:
+                        isSelected ? AppColors.primary : Colors.white,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           );
@@ -176,17 +302,22 @@ class MealPlanScreen extends ConsumerWidget {
     );
   }
 
-  // --- CẬP NHẬT HIỂN THỊ DỮ LIỆU ĐỘNG ---
-  Widget _buildDailySummary(dynamic nutritionState, int selectedIndex) {
-    // List ánh xạ index với Thứ và Ngày để giao diện tự đổi
-    final daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    final dates = ['May 3', 'May 4', 'May 5', 'May 6', 'May 7', 'May 8', 'May 9'];
-
-    String currentDayName = daysOfWeek[selectedIndex];
-    String currentDateText = dates[selectedIndex];
+  // ── Tổng quan dinh dưỡng ──────────────────────────────────────────────────
+  Widget _buildDailySummary(NutritionState state, int selectedIndex) {
+    final daysOfWeek = [
+      'Thứ Hai', 'Thứ Ba', 'Thứ Tư',
+      'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'
+    ];
+    // Real-time: tính ngày thực tế của tuần hiện tại
+    final now    = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final dates  = List.generate(7, (i) {
+      final d = monday.add(Duration(days: i));
+      return '${d.day}/${d.month}';
+    });
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Column(
         children: [
           Row(
@@ -196,7 +327,7 @@ class MealPlanScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    currentDayName, // Thay "Sunday"
+                    daysOfWeek[selectedIndex],
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -205,11 +336,8 @@ class MealPlanScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    currentDateText, // Thay "May 9"
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+                    dates[selectedIndex],
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
               ),
@@ -217,7 +345,7 @@ class MealPlanScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    nutritionState.totalKcal.toString(),
+                    state.totalKcal.toString(),
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -226,29 +354,68 @@ class MealPlanScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   const Text(
-                    'total kcal',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
+                    'tổng kcal',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
-              )
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Sử dụng trực tiếp dữ liệu từ nutritionState thay cho số cứng
-              _buildMacroCard('${nutritionState.protein}g', 'Protein', const Color(0xFF4285F4)),
+              _buildMacroCard('${state.protein}g', 'Đạm',
+                  const Color(0xFF4285F4)),
               const SizedBox(width: 10),
-              _buildMacroCard('${nutritionState.carbs}g', 'Carbs', const Color(0xFFF9A825)),
+              _buildMacroCard('${state.carbs}g', 'Tinh bột',
+                  const Color(0xFFF9A825)),
               const SizedBox(width: 10),
-              _buildMacroCard('${nutritionState.fat}g', 'Fat', const Color(0xFFEA4335)),
+              _buildMacroCard('${state.fat}g', 'Chất béo',
+                  const Color(0xFFEA4335)),
             ],
-          )
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 40),
+      child: Center(
+        child: Column(
+          children: [
+            const Text('🍽️', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 12),
+            const Text(
+              'Chưa có món ăn nào',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Admin hãy thêm món ăn vào hệ thống',
+              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -274,10 +441,7 @@ class MealPlanScreen extends ConsumerWidget {
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
             ),
           ],
         ),

@@ -10,11 +10,10 @@ import '../features/auth/views/register_screen.dart';
 import '../features/auth/views/info_setup_screen.dart';
 import '../features/admin/views/admin_dashboard_screen.dart';
 
-// TODO: Bỏ comment từng dòng khi màn hình thật sẵn sàng
 import '../features/home/views/home_screen.dart';
 import '../features/nutrition/views/meal_plan_screen.dart';
 import '../features/workout/views/workout_schedule_screen.dart';
-// import '../features/grocery/views/grocery_screen.dart';
+import '../features/grocery/views/grocery_screen.dart';
 import '../features/profile/views/profile_screen.dart';
 
 import '../data/repositories/auth_repo.dart';
@@ -135,7 +134,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.grocery,
             pageBuilder: (c, s) =>
-                _fadePage(s, const _ComingSoonScreen(title: 'Grocery')),
+                _fadePage(s, const GroceryScreen()),
           ),
           GoRoute(
             path: AppRoutes.profile,
@@ -219,41 +218,6 @@ class _SplashScreen extends StatelessWidget {
                 strokeWidth: 2.5,
                 color: Colors.white,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Coming Soon (placeholder cho màn hình chưa làm) ──────────────────────────
-class _ComingSoonScreen extends StatelessWidget {
-  final String title;
-  const _ComingSoonScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE0F2FE),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('🚧', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0284C7),
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Đang phát triển...',
-              style: TextStyle(color: Colors.black45, fontSize: 14),
             ),
           ],
         ),

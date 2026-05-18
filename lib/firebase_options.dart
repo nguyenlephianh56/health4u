@@ -64,6 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '927511023655',
     projectId: 'health4u-292bd',
     storageBucket: 'health4u-292bd.firebasestorage.app',
+    iosClientId: '927511023655-h1sv00jud8tt9c7k3sc986j7jf5ftpc6.apps.googleusercontent.com',
     iosBundleId: 'com.example.health4u',
   );
 
@@ -73,6 +74,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '927511023655',
     projectId: 'health4u-292bd',
     storageBucket: 'health4u-292bd.firebasestorage.app',
+    iosClientId: '927511023655-h1sv00jud8tt9c7k3sc986j7jf5ftpc6.apps.googleusercontent.com',
     iosBundleId: 'com.example.health4u',
   );
 

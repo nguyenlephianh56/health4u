@@ -1,123 +1,113 @@
+// lib/features/nutrition/viewmodels/nutrition_viewmodel.dart
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-// 1. Thêm Protein, Carbs, Fat vào State để giao diện có dữ liệu hiển thị
-class NutritionState {
-  final int totalKcal;
-  final int protein;
-  final int carbs;
-  final int fat;
-  final List<Map<String, dynamic>> meals;
+import '../../../data/models/recipe_model.dart';
+import '../../../data/repositories/admin_repo.dart';
 
-  NutritionState({
-    required this.totalKcal,
-    required this.protein,
-    required this.carbs,
-    required this.fat,
-    required this.meals,
+// ── State ────────────────────────────────────────────────────────────────────
+class NutritionState {
+  final bool isLoading;
+  final List<RecipeModel> breakfast;
+  final List<RecipeModel> lunch;
+  final List<RecipeModel> dinner;
+  final List<RecipeModel> snack;
+
+  const NutritionState({
+    this.isLoading = true,
+    this.breakfast = const [],
+    this.lunch     = const [],
+    this.dinner    = const [],
+    this.snack     = const [],
   });
 
+  // Tổng kcal
+  int get totalKcal =>
+      _sum(breakfast) + _sum(lunch) + _sum(dinner) + _sum(snack);
+
+  // Tổng macros
+  int get protein =>
+      _sumMacro(breakfast, 'protein') + _sumMacro(lunch, 'protein') +
+          _sumMacro(dinner, 'protein')   + _sumMacro(snack, 'protein');
+
+  int get carbs =>
+      _sumMacro(breakfast, 'carbs') + _sumMacro(lunch, 'carbs') +
+          _sumMacro(dinner, 'carbs')    + _sumMacro(snack, 'carbs');
+
+  int get fat =>
+      _sumMacro(breakfast, 'fat') + _sumMacro(lunch, 'fat') +
+          _sumMacro(dinner, 'fat')    + _sumMacro(snack, 'fat');
+
+  // Tất cả món
+  List<RecipeModel> get allMeals =>
+      [...breakfast, ...lunch, ...dinner, ...snack];
+
+  int _sum(List<RecipeModel> list) =>
+      list.fold(0, (s, r) => s + r.nutrition.calories.round());
+
+  int _sumMacro(List<RecipeModel> list, String macro) {
+    return list.fold(0, (s, r) {
+      switch (macro) {
+        case 'protein': return s + r.nutrition.protein.round();
+        case 'carbs':   return s + r.nutrition.carbs.round();
+        case 'fat':     return s + r.nutrition.fat.round();
+        default:        return s;
+      }
+    });
+  }
+
   NutritionState copyWith({
-    int? totalKcal,
-    int? protein,
-    int? carbs,
-    int? fat,
-    List<Map<String, dynamic>>? meals,
+    bool? isLoading,
+    List<RecipeModel>? breakfast,
+    List<RecipeModel>? lunch,
+    List<RecipeModel>? dinner,
+    List<RecipeModel>? snack,
   }) {
     return NutritionState(
-      totalKcal: totalKcal ?? this.totalKcal,
-      protein: protein ?? this.protein,
-      carbs: carbs ?? this.carbs,
-      fat: fat ?? this.fat,
-      meals: meals ?? this.meals,
+      isLoading: isLoading ?? this.isLoading,
+      breakfast: breakfast ?? this.breakfast,
+      lunch:     lunch     ?? this.lunch,
+      dinner:    dinner    ?? this.dinner,
+      snack:     snack     ?? this.snack,
     );
   }
 }
 
-// 2. ViewModel xử lý logic: Nhận index ngày vào để biết lấy dữ liệu nào
+// ── ViewModel ────────────────────────────────────────────────────────────────
 class NutritionViewModel extends StateNotifier<NutritionState> {
-  NutritionViewModel(int selectedIndex)
-      : super(NutritionState(
-    totalKcal: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    meals: [],
-  )) {
-    _loadDataForDay(selectedIndex);
+  final AdminRepo _repo;
+
+  NutritionViewModel(this._repo) : super(const NutritionState()) {
+    _listenRecipes();
   }
 
-  void _loadDataForDay(int index) {
-    // 3. Fake dữ liệu nhảy số dựa trên index của ngày được chọn
-    // (Trong thực tế, bạn sẽ fetch từ API/Database theo ngày tại đây)
-    int kcal = 1380;
-    int p = 94;
-    int c = 138;
-    int f = 46;
-
-    if (index == 6) { // Chủ nhật (SUN)
-      kcal = 1320; p = 80; c = 144; f = 48;
-    } else if (index == 3) { // Thứ năm (THU - Ngày mặc định)
-      kcal = 1380; p = 99; c = 138; f = 41;
-    } else { // Các ngày khác (cộng trừ 1 chút dựa vào index để thấy nhảy số)
-      kcal = 1200 + (index * 50);
-      p = 80 + (index * 5);
-      c = 110 + (index * 8);
-      f = 35 + (index * 3);
-    }
-
-    final initialMeals = [
-      {
-        'type': 'BREAKFAST',
-        // Thêm chữ (Day X) để bạn thấy thực đơn cũng tự nhảy khi bấm lịch
-        'name': 'Whole Grain Pancakes (Day ${index + 1})',
-        'cal': 350,
-        'time': '20m',
-        'macros': 'P: 14g  C: 58g  F: 8g',
-      },
-      {
-        'type': 'DINNER',
-        'name': 'Asian Chicken Stir-Fry',
-        'cal': 420,
-        'time': '20m',
-        'macros': 'P: 36g  C: 38g  F: 12g',
-      },
-      {
-        'type': 'SNACK',
-        'name': 'Protein Bar',
-        'cal': 190,
-        'time': '0m',
-        'macros': 'P: 20g  C: 15g  F: 6g',
-      },
-      {
-        'type': 'LUNCH',
-        'name': 'Red Lentil Soup',
-        'cal': 420,
-        'time': '30m',
-        'macros': 'P: 24g  C: 27g  F: 20g',
-      },
-    ];
-
-    state = state.copyWith(
-      totalKcal: kcal,
-      protein: p,
-      carbs: c,
-      fat: f,
-      meals: initialMeals,
-    );
+  void _listenRecipes() {
+    _repo.watchRecipes().listen((recipes) {
+      state = NutritionState(
+        isLoading: false,
+        breakfast: recipes
+            .where((r) => r.mealType.toLowerCase() == 'breakfast')
+            .toList(),
+        lunch: recipes
+            .where((r) => r.mealType.toLowerCase() == 'lunch')
+            .toList(),
+        dinner: recipes
+            .where((r) => r.mealType.toLowerCase() == 'dinner')
+            .toList(),
+        snack: recipes
+            .where((r) => r.mealType.toLowerCase() == 'snack')
+            .toList(),
+      );
+    });
   }
 }
 
-// 4. Providers
-// Mặc định là index=3 (cho THU) khớp ảnh
+// ── Providers ─────────────────────────────────────────────────────────────────
 final selectedDayIndexProvider = StateProvider<int>((ref) => 3);
 
-// SỬA QUAN TRỌNG: Lắng nghe selectedDayIndexProvider để reload ViewModel
 final nutritionViewModelProvider =
 StateNotifierProvider<NutritionViewModel, NutritionState>((ref) {
-  // Bất cứ khi nào index thay đổi (do bạn bấm trên UI), dòng này sẽ chạy lại
-  final selectedIndex = ref.watch(selectedDayIndexProvider);
-
-  // Truyền index mới vào ViewModel để load lại số calo/thực đơn
-  return NutritionViewModel(selectedIndex);
+  final repo = ref.watch(adminRepoProvider);
+  return NutritionViewModel(repo);
 });
