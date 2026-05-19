@@ -91,6 +91,8 @@ class UserModel {
     int? totalPoints,
     int? shieldCount,
     String? activeTagName,
+    String? goal,
+    String? activityLevel,
   }) {
     return UserModel(
       id: id,
@@ -100,8 +102,8 @@ class UserModel {
       dob: dob,
       heightCm: heightCm,
       weightKg: weightKg,
-      activityLevel: activityLevel,
-      goal: goal,
+      activityLevel: activityLevel ?? this.activityLevel,
+      goal: goal ?? this.goal,
       currentStreak: currentStreak ?? this.currentStreak,
       totalPoints: totalPoints ?? this.totalPoints,
       avatarUrl: avatarUrl ?? this.avatarUrl,

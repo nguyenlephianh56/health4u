@@ -40,9 +40,6 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
   void resetState() => state = const ProfileState();
 
   // ── Load / Refresh ──────────────────────────────────────────────────────
-  // refreshProfile() dùng khi quay lại từ RewardShopScreen:
-  //   - Không set status → loading (tránh màn hình trắng giật)
-  //   - Chỉ fetch user doc rồi patch state.user tại chỗ
   Future<void> refreshProfile() async {
     try {
       final uid = _auth.currentUser?.uid;
@@ -54,7 +51,6 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
       final user = UserModel.fromFirestore(
           uid, userDoc.data() as Map<String, dynamic>? ?? {});
 
-      // Chỉ patch user — giữ nguyên tracking, status, v.v.
       state = state.copyWith(user: user);
     } catch (_) {
       // Silent fail — không làm gián đoạn UI
@@ -129,6 +125,43 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     }
   }
 
+  // ── Cập nhật mục tiêu ─────────────────────────────────────────────────────
+  Future<void> updateGoal(String newGoal) async {
+    if (newGoal.trim().isEmpty) return;
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return;
+      await _db.collection('users').doc(uid).update({'goal': newGoal.trim()});
+      state = state.copyWith(
+        user: state.user?.copyWith(goal: newGoal.trim()),
+      );
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: 'Không thể cập nhật mục tiêu: $e',
+      );
+    }
+  }
+
+  // ── Cập nhật mức độ hoạt động ─────────────────────────────────────────────
+  Future<void> updateActivityLevel(String newLevel) async {
+    if (newLevel.trim().isEmpty) return;
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return;
+      await _db
+          .collection('users')
+          .doc(uid)
+          .update({'activity_level': newLevel.trim()});
+      state = state.copyWith(
+        user: state.user?.copyWith(activityLevel: newLevel.trim()),
+      );
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: 'Không thể cập nhật mức hoạt động: $e',
+      );
+    }
+  }
+
   // ── Upload avatar ──────────────────────────────────────────────────────────
   Future<void> uploadAvatar(File imageFile) async {
     state = state.copyWith(isUploadingAvatar: true);
@@ -144,7 +177,7 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     } catch (e) {
       state = state.copyWith(
         isUploadingAvatar: false,
-        errorMessage:      'Tải ảnh thất bại: $e',
+        errorMessage: 'Tải ảnh thất bại: $e',
       );
     }
   }
