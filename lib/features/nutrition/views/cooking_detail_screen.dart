@@ -2,9 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:intl/intl.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 // Tab hiện tại: 0 = Nguyên liệu, 1 = Các bước, 2 = Mẹo
@@ -96,9 +97,8 @@ class CookingDetailScreen extends ConsumerWidget {
                       isEaten: isEaten,
                       onTap: () async {
                         if (isEaten) return; // Không cho bấm lại
-                        ref.read(_eatenProvider(recipeId).notifier).state =
-                        true;
-                        await _addPoints(context, points: 10);
+                        ref.read(_eatenProvider(recipeId).notifier).state = true;
+                        await _markCompletedInFirestore(context, calories: calories);
                       },
                     ),
                     const SizedBox(height: 14),
@@ -130,30 +130,60 @@ class CookingDetailScreen extends ConsumerWidget {
     );
   }
 
-  // Cộng 10 điểm vào Firestore
-  Future<void> _addPoints(BuildContext context, {required int points}) async {
+// Cập nhật Firebase: user_plans, daily_tracking và users
+  Future<void> _markCompletedInFirestore(BuildContext context, {required int calories}) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'total_points': FieldValue.increment(points)});
+
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+
+      // 1. Ngày và docId
+      final String dateStr = meal['date']?.toString() ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final String docId = '${uid}_$dateStr';
+
+      // 2. Loại bữa ăn
+      final String rawType = meal['type']?.toString() ?? 'Breakfast';
+      final String mealTypeKey = rawType.isNotEmpty
+          ? '${rawType[0].toUpperCase()}${rawType.substring(1).toLowerCase()}'
+          : 'Breakfast';
+
+      // 3. Update user_plans (THÊM "meals." VÀO TRƯỚC ĐỂ TRỎ ĐÚNG CHỖ)
+      final userPlansRef = db.collection('user_plans').doc(docId);
+      batch.update(userPlansRef, {'meals.$mealTypeKey.is_completed': true});
+
+      // 4. Update daily_tracking
+      final dailyTrackingRef = db.collection('daily_tracking').doc(docId);
+      batch.set(
+        dailyTrackingRef,
+        {
+          'consumed_kcal': FieldValue.increment(calories),
+          'meals_completed': FieldValue.increment(1),
+        },
+        SetOptions(merge: true),
+      );
+
+      // 5. Update users điểm
+      final userRef = db.collection('users').doc(uid);
+      batch.update(userRef, {'total_points': FieldValue.increment(10)});
+
+      // Bắt đầu ghi
+      await batch.commit();
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🎉 Bạn vừa nhận được +$points điểm!'),
+            content: const Text('🎉 Đã đánh dấu hoàn thành và nhận +10 điểm!'),
             backgroundColor: const Color(0xFF0D86CF),
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
-    } catch (_) {
-      // Lỗi kết nối — bỏ qua lặng lẽ
+    } catch (e) {
+      debugPrint("❌ LỖI FIREBASE: $e");
     }
   }
 

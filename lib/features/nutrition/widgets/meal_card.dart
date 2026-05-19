@@ -4,27 +4,32 @@ import '../views/cooking_detail_screen.dart';
 
 class MealCard extends StatelessWidget {
   final Map<String, dynamic> meal;
-  final VoidCallback? onSwapTap;
 
   const MealCard({
     super.key,
     required this.meal,
-    this.onSwapTap,
   });
 
   static String _translateMealType(String type) {
     switch (type.toUpperCase()) {
-      case 'BREAKFAST': return 'BỮA SÁNG';
-      case 'LUNCH':     return 'BỮA TRƯA';
-      case 'DINNER':    return 'BỮA TỐI';
-      case 'SNACK':     return 'BỮA PHỤ';
-      default:          return type;
+      case 'BREAKFAST':
+        return 'BỮA SÁNG';
+      case 'LUNCH':
+        return 'BỮA TRƯA';
+      case 'DINNER':
+        return 'BỮA TỐI';
+      case 'SNACK':
+        return 'BỮA PHỤ';
+      default:
+        return type;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final String mealType = _translateMealType((meal['type'] ?? 'BREAKFAST').toString());
+    final String mealType =
+    _translateMealType((meal['type'] ?? 'BREAKFAST').toString());
+
     final String mealName = (meal['name'] ?? '').toString();
     final String mealTime = (meal['time'] ?? '20m').toString();
 
@@ -43,8 +48,11 @@ class MealCard extends StatelessWidget {
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
@@ -66,30 +74,36 @@ class MealCard extends StatelessWidget {
                   color: AppColors.background,
                   image: DecorationImage(
                     image: NetworkImage(
-                      meal['image']?.toString() ?? 'https://via.placeholder.com/150',
+                      meal['image']?.toString() ??
+                          'https://via.placeholder.com/150',
                     ),
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+
+            const SizedBox(width: 10),
 
             // Content
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Type + Time
                   Row(
                     children: [
                       Container(
-                        width: 18,
-                        height: 18,
+                        width: 17,
+                        height: 17,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(6),
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFFF7E5F), Color(0xFFFEB47B)],
+                            colors: [
+                              Color(0xFFFF7E5F),
+                              Color(0xFFFEB47B),
+                            ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -97,12 +111,17 @@ class MealCard extends StatelessWidget {
                         child: const Icon(
                           Icons.wb_sunny,
                           color: Colors.white,
-                          size: 11,
+                          size: 10,
                         ),
                       ),
+
                       const SizedBox(width: 5),
+
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFEFCF),
                           borderRadius: BorderRadius.circular(999),
@@ -110,96 +129,107 @@ class MealCard extends StatelessWidget {
                         child: Text(
                           mealType,
                           style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFFE3A328),
                             letterSpacing: 0.1,
                           ),
                         ),
                       ),
+
                       const Spacer(),
-                      const Icon(Icons.access_time, color: Color(0xFF7E8A9A), size: 14),
+
+                      const Icon(
+                        Icons.access_time,
+                        color: Color(0xFF7E8A9A),
+                        size: 13,
+                      ),
+
                       const SizedBox(width: 3),
+
                       Text(
                         mealTime,
                         style: const TextStyle(
                           color: Color(0xFF7E8A9A),
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 4),
 
                   // Title
                   Text(
                     mealName,
                     style: const TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      height: 1.15,
+                      height: 1.05,
                       color: Color(0xFF111827),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
 
                   // Macros
                   Row(
                     children: [
-                      _MacroPill("P", protein, const Color(0xFF5B7CFF), const Color(0xFFE8F0FF)),
-                      const SizedBox(width: 5),
-                      _MacroPill("C", carb, const Color(0xFFE3A328), const Color(0xFFFFF0D9)),
-                      const SizedBox(width: 5),
-                      _MacroPill("F", fat, const Color(0xFFEE5A56), const Color(0xFFFFE2E0)),
+                      _MacroPill(
+                        "P",
+                        protein,
+                        const Color(0xFF5B7CFF),
+                        const Color(0xFFE8F0FF),
+                      ),
+
+                      const SizedBox(width: 4),
+
+                      _MacroPill(
+                        "C",
+                        carb,
+                        const Color(0xFFE3A328),
+                        const Color(0xFFFFF0D9),
+                      ),
+
+                      const SizedBox(width: 4),
+
+                      _MacroPill(
+                        "F",
+                        fat,
+                        const Color(0xFFEE5A56),
+                        const Color(0xFFFFE2E0),
+                      ),
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
 
-                  // Calories + right action
+                  // Calories
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
                         cal,
                         style: TextStyle(
-                          fontSize: 19.5,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: AppColors.primary,
                           height: 1,
                         ),
                       ),
+
+                      const SizedBox(width: 2),
+
                       const Text(
-                        " kcal",
+                        "kcal",
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: Color(0xFF2C3E50),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const Spacer(),
-                      if (onSwapTap != null)
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(
-                            Icons.swap_horiz,
-                            color: Color(0xFF8C98A8),
-                            size: 18,
-                          ),
-                          onPressed: onSwapTap,
-                        )
-                      else
-                        const Icon(
-                          Icons.chevron_right,
-                          color: Color(0xFF8C98A8),
-                          size: 18,
-                        ),
                     ],
                   ),
                 ],
@@ -218,12 +248,20 @@ class _MacroPill extends StatelessWidget {
   final Color textColor;
   final Color bgColor;
 
-  const _MacroPill(this.label, this.value, this.textColor, this.bgColor);
+  const _MacroPill(
+      this.label,
+      this.value,
+      this.textColor,
+      this.bgColor,
+      );
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 7,
+        vertical: 2.5,
+      ),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(999),
@@ -234,16 +272,18 @@ class _MacroPill extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
               color: textColor,
             ),
           ),
-          const SizedBox(width: 3),
+
+          const SizedBox(width: 2),
+
           Text(
             value,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               color: textColor,
             ),
