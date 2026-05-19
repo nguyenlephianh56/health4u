@@ -121,6 +121,44 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
     });
   }
 
+  // ── Exercise image per item ───────────────────────────────────────────────
+  Future<void> _pickAndUploadExerciseImage(int index) async {
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1200,
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    setState(() {
+      _exerciseCtrls[index].pickedImageFile = file;
+      _exerciseCtrls[index].isUploading     = true;
+    });
+
+    try {
+      final url = await CloudinaryService.uploadImage(file);
+      setState(() {
+        _exerciseCtrls[index].imageUrl    = url;
+        _exerciseCtrls[index].isUploading = false;
+      });
+      _showSuccess('Tải ảnh bài tập lên thành công!');
+    } catch (e) {
+      setState(() {
+        _exerciseCtrls[index].isUploading     = false;
+        _exerciseCtrls[index].pickedImageFile = null;
+      });
+      _showError('Tải ảnh thất bại: $e');
+    }
+  }
+
+  void _removeExerciseImage(int index) {
+    setState(() {
+      _exerciseCtrls[index].pickedImageFile = null;
+      _exerciseCtrls[index].imageUrl        = '';
+    });
+  }
+
   // ── Exercises ─────────────────────────────────────────────────────────────
   void _addExercise() =>
       setState(() => _exerciseCtrls.add(_ExerciseControllers.empty()));
@@ -152,6 +190,7 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
       reps:        int.tryParse(c.repsCtrl.text) ?? 0,
       restSec:     int.tryParse(c.restCtrl.text) ?? 0,
       instruction: c.instructionCtrl.text.trim(),
+      imageUrl:    c.imageUrl,
     ))
         .toList();
 
@@ -536,6 +575,9 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
                     prefixIconConstraints: const BoxConstraints(),
                   ),
                 ),
+                // ── Ảnh minh họa cho exercise này ───────────────────
+                const SizedBox(height: 8),
+                _buildExerciseImagePicker(i),
               ],
             ),
           );
@@ -571,6 +613,195 @@ class _WorkoutFormDialogState extends State<WorkoutFormDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  // ── Ảnh riêng cho từng exercise ──────────────────────────────────────────
+  Widget _buildExerciseImagePicker(int index) {
+    final ex = _exerciseCtrls[index];
+
+    // Đang upload
+    if (ex.isUploading) {
+      return Container(
+        width: double.infinity,
+        height: 72,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Đang tải ảnh lên...',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Đã có ảnh
+    if (ex.pickedImageFile != null || ex.imageUrl.isNotEmpty) {
+      return Row(
+        children: [
+          // Thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ex.pickedImageFile != null
+                ? Image.file(
+              ex.pickedImageFile!,
+              width: 72,
+              height: 72,
+              fit: BoxFit.cover,
+            )
+                : Image.network(
+              ex.imageUrl,
+              width: 72,
+              height: 72,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  width: 72,
+                  height: 72,
+                  color: Colors.white,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  ),
+                );
+              },
+              errorBuilder: (_, __, ___) => Container(
+                width: 72,
+                height: 72,
+                color: Colors.white,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: Colors.black26, size: 28),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Badge + actions
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded,
+                          size: 12, color: Color(0xFF16A34A)),
+                      SizedBox(width: 4),
+                      Text(
+                        'Đã có ảnh',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF16A34A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _pickAndUploadExerciseImage(index),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Đổi ảnh',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _removeExerciseImage(index),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEBEB),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Xoá',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFE53935)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Chưa có ảnh
+    return GestureDetector(
+      onTap: () => _pickAndUploadExerciseImage(index),
+      child: Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.25),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_photo_alternate_outlined,
+                color: AppColors.primary.withOpacity(0.7), size: 18),
+            const SizedBox(width: 6),
+            Text(
+              'Thêm ảnh minh họa cho bài tập này',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.primary.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -955,7 +1186,12 @@ class _ExerciseControllers {
   final TextEditingController setsCtrl;
   final TextEditingController repsCtrl;
   final TextEditingController restCtrl;
-  final TextEditingController instructionCtrl; // Hướng dẫn chi tiết
+  final TextEditingController instructionCtrl;
+
+  // ── Ảnh riêng cho từng exercise ──
+  File?  pickedImageFile;
+  String imageUrl;
+  bool   isUploading;
 
   _ExerciseControllers({
     required this.nameCtrl,
@@ -963,6 +1199,9 @@ class _ExerciseControllers {
     required this.repsCtrl,
     required this.restCtrl,
     required this.instructionCtrl,
+    this.pickedImageFile,
+    this.imageUrl    = '',
+    this.isUploading = false,
   });
 
   factory _ExerciseControllers.empty() => _ExerciseControllers(
@@ -980,6 +1219,7 @@ class _ExerciseControllers {
         repsCtrl:        TextEditingController(text: e.reps.toString()),
         restCtrl:        TextEditingController(text: e.restSec.toString()),
         instructionCtrl: TextEditingController(text: e.instruction),
+        imageUrl:        e.imageUrl,
       );
 
   void dispose() {

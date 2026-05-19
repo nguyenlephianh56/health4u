@@ -7,6 +7,7 @@ class ExerciseItem {
   final int reps;
   final int restSec;
   final String instruction; // Hướng dẫn chi tiết thực hiện
+  final String imageUrl;    // Ảnh minh họa riêng cho bài tập này
 
   const ExerciseItem({
     required this.id,
@@ -15,6 +16,7 @@ class ExerciseItem {
     required this.reps,
     required this.restSec,
     this.instruction = '',
+    this.imageUrl    = '',
   });
 
   factory ExerciseItem.fromMap(Map<String, dynamic> map) {
@@ -25,6 +27,7 @@ class ExerciseItem {
       reps:        (map['reps'] as num?)?.toInt() ?? 0,
       restSec:     (map['rest_sec'] as num?)?.toInt() ?? 0,
       instruction: map['instruction']?.toString() ?? '',
+      imageUrl:    map['image_url']?.toString() ?? '',
     );
   }
 
@@ -35,6 +38,7 @@ class ExerciseItem {
     'reps':        reps,
     'rest_sec':    restSec,
     'instruction': instruction,
+    'image_url':   imageUrl,
   };
 }
 
