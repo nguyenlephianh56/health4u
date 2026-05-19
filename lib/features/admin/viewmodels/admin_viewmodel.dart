@@ -18,26 +18,23 @@ StateNotifierProvider<AdminViewModel, AdminState>((ref) {
 
 class AdminViewModel extends StateNotifier<AdminState> {
   final AdminRepo _repo;
-  StreamSubscription<List<RecipeModel>>?  _recipesSub;
-  StreamSubscription<List<WorkoutModel>>? _workoutsSub;
+  StreamSubscription<List<RecipeModel>>?    _recipesSub;
+  StreamSubscription<List<WorkoutModel>>?   _workoutsSub;
+  StreamSubscription<List<AdminUserModel>>? _usersSub;
 
   AdminViewModel(this._repo) : super(const AdminState()) {
     loadDashboard();
     _listenRecipes();
     _listenWorkouts();
+    _listenUsers();
   }
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
   Future<void> loadDashboard() async {
+    // Count đả stream tự cập nhật real-time, không lấy từ đầy nữa
     state = state.copyWith(status: AdminStatus.loading);
     try {
-      final stats = await _repo.getDashboardStats();
-      state = state.copyWith(
-        status:       AdminStatus.success,
-        recipeCount:  stats['recipes']  ?? 0,
-        workoutCount: stats['workouts'] ?? 0,
-        userCount:    stats['users']    ?? 0,
-      );
+      state = state.copyWith(status: AdminStatus.success);
     } catch (e) {
       state = state.copyWith(
         status:       AdminStatus.error,
@@ -49,14 +46,36 @@ class AdminViewModel extends StateNotifier<AdminState> {
   // ── Stream listeners ──────────────────────────────────────────────────────
   void _listenRecipes() {
     _recipesSub = _repo.watchRecipes().listen(
-          (recipes) => state = state.copyWith(recipes: recipes),
+          (recipes) => state = state.copyWith(
+        recipes:     recipes,
+        recipeCount: recipes.length,
+      ),
       onError: (_) {},
     );
   }
 
   void _listenWorkouts() {
     _workoutsSub = _repo.watchWorkouts().listen(
-          (workouts) => state = state.copyWith(workouts: workouts),
+          (workouts) => state = state.copyWith(
+        workouts:     workouts,
+        workoutCount: workouts.length,
+      ),
+      onError: (_) {},
+    );
+  }
+
+  void _listenUsers() {
+    _usersSub = _repo.watchUsers().listen(
+          (users) {
+        final q = state.searchQuery.trim().toLowerCase();
+        state = state.copyWith(
+          allUsers:      users,
+          filteredUsers: q.isEmpty
+              ? users
+              : users.where((u) => u.name.toLowerCase().contains(q)).toList(),
+          userCount: users.length,
+        );
+      },
       onError: (_) {},
     );
   }
@@ -184,6 +203,7 @@ class AdminViewModel extends StateNotifier<AdminState> {
   void dispose() {
     _recipesSub?.cancel();
     _workoutsSub?.cancel();
+    _usersSub?.cancel();
     super.dispose();
   }
 }

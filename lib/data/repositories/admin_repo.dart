@@ -78,6 +78,16 @@ class AdminRepo {
   }
 
   // Users (Admin)
+  Stream<List<AdminUserModel>> watchUsers() {
+    return _db
+        .collection('users')
+        .orderBy('name')
+        .snapshots()
+        .map((snap) => snap.docs
+        .map((doc) => AdminUserModel.fromFirestore(doc.id, doc.data()))
+        .toList());
+  }
+
   Future<List<AdminUserModel>> getAllUsers() async {
     final snap = await _db
         .collection('users')
