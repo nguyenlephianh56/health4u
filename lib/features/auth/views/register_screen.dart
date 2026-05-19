@@ -324,7 +324,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       children: [
         // Nút back
         GestureDetector(
-          onTap: () => Navigator.pop(context),
+          onTap: () => context.go(AppRoutes.login),
           child: Container(
             width: 44,
             height: 44,

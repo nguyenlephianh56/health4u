@@ -112,6 +112,20 @@ class AuthViewModel extends StateNotifier<AuthState> {
     }
   }
 
+  // ── Quên mật khẩu ──────────────────────────────────────────────────────
+  // Được gọi từ: LoginScreen khi user bấm "Quên mật khẩu?"
+  Future<void> forgotPassword({required String email}) async {
+    state = const AuthState.loading();
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      state = const AuthState.success();
+    } on FirebaseAuthException catch (e) {
+      state = AuthState.error(_mapAuthError(e.code));
+    } catch (_) {
+      state = const AuthState.error('Không thể gửi email. Thử lại nhé!');
+    }
+  }
+
   // ── Reset state ─────────────────────────────────────────────────────────
   // Gọi khi cần xóa lỗi (vd: user bắt đầu gõ lại)
   void resetState() => state = const AuthState.initial();

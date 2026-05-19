@@ -36,6 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _forgotEmailController = TextEditingController();
 
   // State cục bộ của View: chỉ quản lý show/hide password
   // (Không phải state nghiệp vụ → không cần đưa vào ViewModel)
@@ -65,6 +66,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _animController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _forgotEmailController.dispose();
     super.dispose();
   }
 
@@ -147,9 +149,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {
-                                // TODO: Tạo màn hình forgot password sau
-                              },
+                              onPressed: _showForgotPasswordSheet,
                               child: const Text(
                                 'Quên mật khẩu?',
                                 style: TextStyle(
@@ -176,11 +176,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             onPressed: _handleLogin,
                           ),
 
-                          const SizedBox(height: 24),
-                          _buildDivider(),
-                          const SizedBox(height: 24),
-                          _buildGoogleButton(),
-
                           const Spacer(),
                           _buildRegisterLink(),
                           const SizedBox(height: 24),
@@ -194,6 +189,181 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // ── Quên mật khẩu (BottomSheet) ─────────────────────────────────────────
+  void _showForgotPasswordSheet() {
+    _forgotEmailController.clear();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final state = ref.watch(authViewModelProvider);
+            final isLoading = state.status == AuthStatus.loading;
+            final isSuccess = state.status == AuthStatus.success;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 36),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: isSuccess
+                    ? _buildForgotSuccess()
+                    : _buildForgotForm(ref, isLoading, state.errorMessage),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() => ref.read(authViewModelProvider.notifier).resetState());
+  }
+
+  Widget _buildForgotSuccess() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        const Text('📬', style: TextStyle(fontSize: 48)),
+        const SizedBox(height: 16),
+        const Text(
+          'Kiểm tra hộp thư nhé!',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Link đặt lại mật khẩu đã được gửi đến email của bạn.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.black.withOpacity(0.5),
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 28),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: const Text(
+              'Đã hiểu',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildForgotForm(WidgetRef ref, bool isLoading, String? errorMessage) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Quên mật khẩu?',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Nhập email và chúng tôi sẽ gửi link đặt lại mật khẩu.',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.black.withOpacity(0.5),
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 20),
+        AuthTextField(
+          controller: _forgotEmailController,
+          label: 'Email',
+          hint: 'example@gmail.com',
+          prefixIcon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        if (errorMessage != null) ...[
+          const SizedBox(height: 12),
+          AuthErrorBanner(message: errorMessage),
+        ],
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: isLoading
+                ? null
+                : () {
+              final email = _forgotEmailController.text.trim();
+              if (email.isEmpty) return;
+              ref
+                  .read(authViewModelProvider.notifier)
+                  .forgotPassword(email: email);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: isLoading
+                ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            )
+                : const Text(
+              'Gửi link đặt lại',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -275,54 +445,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         size: 22,
       ),
       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(color: Colors.black.withOpacity(0.12), thickness: 1),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'hoặc',
-            style: TextStyle(
-              color: Colors.black.withOpacity(0.4),
-              fontSize: 13,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Divider(color: Colors.black.withOpacity(0.12), thickness: 1),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGoogleButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 58,
-      child: OutlinedButton.icon(
-        onPressed: () {/* TODO: Google Sign In */},
-        icon: const Text('🌐', style: TextStyle(fontSize: 20)),
-        label: const Text(
-          'Đăng nhập với Google',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: AppColors.text,
-          ),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: Colors.black.withOpacity(0.15)),
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          backgroundColor: AppColors.surface,
-        ),
-      ),
     );
   }
 
