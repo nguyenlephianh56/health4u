@@ -284,9 +284,14 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
                     decoration: BoxDecoration(
                       color: isSelected
                           ? Colors.white
-                          : Colors.white.withOpacity(0.12),
-                      borderRadius:
-                      BorderRadius.circular(14),
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
+                      border: isToday && !isSelected
+                          ? Border.all(
+                        color: Colors.white,
+                        width: 2,
+                      )
+                          : null,
                     ),
                     child: Column(
                       mainAxisAlignment:

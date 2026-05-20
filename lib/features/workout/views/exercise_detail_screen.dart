@@ -7,65 +7,14 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:health4u/core/constants/app_colors.dart';
+import 'package:health4u/data/repositories/health_repo.dart';
 import '../viewmodels/workout_view_model.dart';
 
 // ── Providers ──────────────────────────────────────────────────────────────────
-
-final _activeExerciseProvider =
-StateProvider.family<int, String>((ref, id) => 0);
-
-final _expandedExerciseProvider =
-StateProvider.family<int?, String>((ref, id) => null);
-
 final _workoutDoneProvider =
 StateProvider.family<bool, String>((ref, id) => false);
 
-// ── Firebase: chi tiết bài tập ────────────────────────────────────────────────
-//
-// Firestore structure:
-//   exercises/{exerciseName}/
-//     description : String   — hướng dẫn thực hiện
-//     tags        : List<String> — nhóm cơ / phân loại
-//     gifUrl      : String?  — link GIF (tuỳ chọn sau này)
-//
-// Nếu document chưa tồn tại → trả về null → UI hiển thị fallback
-
-class ExerciseDetail {
-  final String description;
-  final List<String> tags;
-  final String? gifUrl;
-
-  const ExerciseDetail({
-    required this.description,
-    required this.tags,
-    this.gifUrl,
-  });
-
-  factory ExerciseDetail.fromFirestore(Map<String, dynamic> data) =>
-      ExerciseDetail(
-        description: data['description'] as String? ?? '',
-        tags: List<String>.from(data['tags'] as List? ?? []),
-        gifUrl: data['gifUrl'] as String?,
-      );
-}
-
-/// Key = tên bài tập (ex.name)
-final exerciseDetailProvider =
-FutureProvider.family<ExerciseDetail?, String>((ref, name) async {
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('exercises')
-        .doc(name)
-        .get();
-    if (!doc.exists || doc.data() == null) return null;
-    return ExerciseDetail.fromFirestore(doc.data()!);
-  } catch (_) {
-    return null;
-  }
-});
-
 // ── Timer ──────────────────────────────────────────────────────────────────────
-
 class TimerState {
   final int remaining;
   final int total;
@@ -90,8 +39,7 @@ class TimerState {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  double get progress =>
-      total > 0 ? 1 - (remaining / total) : 0;
+  double get progress => total > 0 ? 1 - (remaining / total) : 0;
 }
 
 class TimerNotifier extends StateNotifier<TimerState> {
@@ -99,9 +47,10 @@ class TimerNotifier extends StateNotifier<TimerState> {
 
   TimerNotifier(int totalSeconds)
       : super(TimerState(
-      remaining: totalSeconds,
-      total: totalSeconds,
-      isRunning: false));
+    remaining: totalSeconds,
+    total: totalSeconds,
+    isRunning: false,
+  ));
 
   void toggle() {
     if (state.isRunning) {
@@ -133,48 +82,32 @@ class TimerNotifier extends StateNotifier<TimerState> {
   }
 }
 
-// key = giây ban đầu của bài tập
-final _timerProvider = StateNotifierProvider.family<TimerNotifier, TimerState, int>(
+final _timerProvider =
+StateNotifierProvider.family<TimerNotifier, TimerState, int>(
       (ref, seconds) => TimerNotifier(seconds),
 );
 
-// ── Helper: parse "2:00" → giây ───────────────────────────────────────────────
-int _parseDuration(String dur) {
-  final parts = dur.split(':');
-  if (parts.length == 2) {
-    final m = int.tryParse(parts[0]) ?? 0;
-    final s = int.tryParse(parts[1]) ?? 0;
-    return m * 60 + s;
-  }
-  return 60;
-}
-
-// ── Nhóm cơ theo loại ─────────────────────────────────────────────────────────
-List<String> _muscleGroups(DayWorkout w) {
-  switch (w.type) {
-    case 'HIIT':       return ['Toàn thân', 'Tim mạch', 'Cơ đùi', 'Cơ lõi'];
-    case 'Yoga':       return ['Linh hoạt', 'Cơ lõi', 'Cân bằng', 'Thư giãn'];
-    case 'Sức mạnh':  return ['Cơ ngực', 'Cơ lưng', 'Cơ đùi', 'Cơ tay'];
-    case 'Cardio':     return ['Tim mạch', 'Cơ chân', 'Sức bền'];
-    case 'Toàn thân': return ['Toàn thân', 'Sức mạnh', 'Tim mạch'];
-    case 'Kéo giãn':  return ['Linh hoạt', 'Phục hồi', 'Cơ lưng'];
-    case 'Nghỉ ngơi': return ['Toàn thân', 'Linh hoạt', 'Phục hồi', 'Tinh thần'];
-    default:           return ['Toàn thân'];
-  }
-}
-
 // ── Main Screen ────────────────────────────────────────────────────────────────
 class ExerciseDetailScreen extends ConsumerWidget {
-  final DayWorkout workout;
-  const ExerciseDetailScreen({super.key, required this.workout});
+  final PlanWorkout workout;
+  final String date;
+  final String dayOfWeek;
+  final String docId;       // Firestore doc ID để mark completed
+
+  const ExerciseDetailScreen({
+    super.key,
+    required this.workout,
+    required this.date,
+    required this.dayOfWeek,
+    required this.docId,
+  });
+
+  int get _totalSeconds => workout.durationMin * 60;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDone      = ref.watch(_workoutDoneProvider(workout.title));
-    final activeIndex = ref.watch(_activeExerciseProvider(workout.title));
-    final activeEx    = workout.exercises[activeIndex];
-    final timerSecs   = _parseDuration(activeEx.duration);
-    final timer       = ref.watch(_timerProvider(timerSecs));
+    final isDone = ref.watch(_workoutDoneProvider(workout.workoutId));
+    final timer  = ref.watch(_timerProvider(_totalSeconds));
 
     return Scaffold(
       backgroundColor: const Color(0xFFEAF3FF),
@@ -182,7 +115,7 @@ class ExerciseDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Banner(workout: workout),
+            _Banner(workout: workout, dayOfWeek: dayOfWeek, date: date),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: Column(
@@ -190,18 +123,19 @@ class ExerciseDetailScreen extends ConsumerWidget {
                 children: [
                   _TimerCard(
                     workout: workout,
-                    activeIndex: activeIndex,
-                    activeEx: activeEx,
                     timer: timer,
-                    timerSecs: timerSecs,
+                    totalSeconds: _totalSeconds,
                   ),
                   const SizedBox(height: 16),
-                  _CompleteButton(workout: workout, isDone: isDone),
+                  _CompleteButton(
+                    workout: workout,
+                    isDone: isDone,
+                    docId: docId,
+                  ),
                   const SizedBox(height: 16),
-                  _MuscleGroupsCard(workout: workout),
-                  const SizedBox(height: 16),
-                  _ExerciseAccordion(
-                      workout: workout, activeIndex: activeIndex),
+                  _WorkoutInfoCard(workout: workout),
+                  const SizedBox(height: 20),
+                  _ExerciseListSection(workoutId: workout.workoutId),
                   const SizedBox(height: 32),
                 ],
               ),
@@ -213,10 +147,327 @@ class ExerciseDetailScreen extends ConsumerWidget {
   }
 }
 
+// ── Section danh sách bài tập nhỏ ────────────────────────────────────────────
+class _ExerciseListSection extends ConsumerWidget {
+  final String workoutId;
+  const _ExerciseListSection({required this.workoutId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncWorkout = ref.watch(workoutDetailProvider(workoutId));
+
+    return asyncWorkout.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2.5,
+          ),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (workoutDetail) {
+        if (workoutDetail == null || workoutDetail.exercises.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final exercises = workoutDetail.exercises;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Tiêu đề section ──────────────────────────────────────────────
+            Row(
+              children: [
+                const Text(
+                  'Các bài tập',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${exercises.length} bài',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // ── Danh sách card bài tập nhỏ ───────────────────────────────────
+            ...exercises.asMap().entries.map((entry) {
+              final index   = entry.key;
+              final exercise = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _ExerciseCard(exercise: exercise, index: index + 1),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Card bài tập nhỏ ─────────────────────────────────────────────────────────
+class _ExerciseCard extends StatefulWidget {
+  final dynamic exercise; // ExerciseItem
+  final int index;
+  const _ExerciseCard({required this.exercise, required this.index});
+
+  @override
+  State<_ExerciseCard> createState() => _ExerciseCardState();
+}
+
+class _ExerciseCardState extends State<_ExerciseCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ex = widget.exercise;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // ── Header (luôn hiển thị) ────────────────────────────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(18),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  // Số thứ tự
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${widget.index}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Tên bài tập
+                  Expanded(
+                    child: Text(
+                      ex.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ),
+
+                  // Thông số nhanh: sets x reps
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF3FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${ex.sets} x ${ex.reps}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Mũi tên expand
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.grey.shade400,
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Chi tiết (chỉ hiển thị khi expanded) ─────────────────────────
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: _ExerciseDetail(exercise: ex),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 250),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Chi tiết bài tập nhỏ (khi mở rộng) ──────────────────────────────────────
+class _ExerciseDetail extends StatelessWidget {
+  final dynamic exercise; // ExerciseItem
+  const _ExerciseDetail({required this.exercise});
+
+  @override
+  Widget build(BuildContext context) {
+    final ex = exercise;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(
+            height: 1,
+            color: AppColors.text.withOpacity(0.07),
+          ),
+          const SizedBox(height: 14),
+
+          // Ảnh minh họa (nếu có)
+          if (ex.imageUrl.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                ex.imageUrl,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Thông số: sets / reps / nghỉ
+          Row(
+            children: [
+              _StatChip(label: 'Hiệp', value: '${ex.sets}'),
+              const SizedBox(width: 8),
+              _StatChip(label: 'Reps', value: '${ex.reps}'),
+              const SizedBox(width: 8),
+              _StatChip(label: 'Nghỉ', value: '${ex.restSec}s'),
+            ],
+          ),
+
+          // Hướng dẫn (nếu có)
+          if (ex.instruction.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Hướng dẫn',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text.withOpacity(0.5),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              ex.instruction,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.text.withOpacity(0.75),
+                height: 1.5,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Chip thống số nhỏ (Hiệp / Reps / Nghỉ) ───────────────────────────────────
+class _StatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF3FF),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.text.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Banner ─────────────────────────────────────────────────────────────────────
 class _Banner extends StatelessWidget {
-  final DayWorkout workout;
-  const _Banner({required this.workout});
+  final PlanWorkout workout;
+  final String dayOfWeek;
+  final String date;
+  const _Banner({
+    required this.workout,
+    required this.dayOfWeek,
+    required this.date,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -226,13 +477,11 @@ class _Banner extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: workout.isRest
-                    ? [const Color(0xFF5B8DEF), const Color(0xFF3A6FD8)]
-                    : [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
+                colors: [Color(0xFF1A1A2E), Color(0xFF16213E)],
               ),
             ),
           ),
@@ -241,8 +490,10 @@ class _Banner extends StatelessWidget {
             bottom: 36,
             child: Opacity(
               opacity: 0.2,
-              child: Text(workout.emoji,
-                  style: const TextStyle(fontSize: 120)),
+              child: Text(
+                workout.emoji,
+                style: const TextStyle(fontSize: 120),
+              ),
             ),
           ),
           Container(
@@ -264,7 +515,8 @@ class _Banner extends StatelessWidget {
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      width: 40, height: 40,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.35),
                         shape: BoxShape.circle,
@@ -274,23 +526,18 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: workout.isRest
-                          ? Colors.white.withOpacity(0.2)
-                          : AppColors.secondary,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      workout.isRest ? 'Nghỉ ngơi' : workout.type,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                  Row(
+                    children: [
+                      _BannerTag(
+                        label: workout.category,
+                        color: AppColors.secondary,
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      _BannerTag(
+                        label: workout.difficultyVi,
+                        color: _difficultyColor(workout.difficulty),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -307,13 +554,19 @@ class _Banner extends StatelessWidget {
                       const Icon(Icons.timer_outlined,
                           color: Colors.white70, size: 14),
                       const SizedBox(width: 4),
-                      Text('${workout.minutes} phút',
+                      Text('${workout.durationMin} phút',
                           style: const TextStyle(
                               color: Colors.white70, fontSize: 13)),
                       const SizedBox(width: 14),
                       const Text('🔥', style: TextStyle(fontSize: 13)),
                       const SizedBox(width: 4),
-                      Text('${workout.calories} calo đốt',
+                      Text('${workout.caloriesBurned} cal',
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 13)),
+                      const SizedBox(width: 14),
+                      const Text('💪', style: TextStyle(fontSize: 13)),
+                      const SizedBox(width: 4),
+                      Text(workout.muscleGroup,
                           style: const TextStyle(
                               color: Colors.white70, fontSize: 13)),
                     ],
@@ -327,28 +580,58 @@ class _Banner extends StatelessWidget {
       ),
     );
   }
+
+  Color _difficultyColor(String d) {
+    switch (d) {
+      case 'Advanced':
+        return const Color(0xFFE74C3C);
+      case 'Intermediate':
+        return const Color(0xFFF39C12);
+      default:
+        return const Color(0xFF2ECC71);
+    }
+  }
+}
+
+class _BannerTag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _BannerTag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
 }
 
 // ── Timer Card ─────────────────────────────────────────────────────────────────
 class _TimerCard extends ConsumerWidget {
-  final DayWorkout workout;
-  final int activeIndex;
-  final ExerciseItem activeEx;
+  final PlanWorkout workout;
   final TimerState timer;
-  final int timerSecs;
+  final int totalSeconds;
 
   const _TimerCard({
     required this.workout,
-    required this.activeIndex,
-    required this.activeEx,
     required this.timer,
-    required this.timerSecs,
+    required this.totalSeconds,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final total = workout.exercises.length;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -366,60 +649,42 @@ class _TimerCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Bài ${activeIndex + 1}/$total',
-                style: const TextStyle(
+              const Text(
+                'Đếm giờ tập',
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                   color: AppColors.text,
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(activeEx.emoji,
-                        style: const TextStyle(fontSize: 13)),
-                    const SizedBox(width: 5),
-                    Text(
-                      activeEx.name,
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  workout.emoji,
+                  style: const TextStyle(fontSize: 18),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: timer.progress,
               minHeight: 4,
               backgroundColor: Colors.grey.shade200,
-              valueColor:
-              AlwaysStoppedAnimation<Color>(AppColors.primary),
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
             ),
           ),
           const SizedBox(height: 22),
-
-          // Timer
           Center(
             child: Text(
               timer.formatted,
@@ -434,7 +699,7 @@ class _TimerCard extends ConsumerWidget {
           const SizedBox(height: 4),
           Center(
             child: Text(
-              activeEx.detail,
+              '${workout.durationMin} phút • ${workout.muscleGroup}',
               style: TextStyle(
                 fontSize: 14,
                 color: AppColors.text.withOpacity(0.5),
@@ -442,84 +707,43 @@ class _TimerCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 22),
-
-          // Controls
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               GestureDetector(
                 onTap: () =>
-                    ref.read(_timerProvider(timerSecs).notifier).toggle(),
+                    ref.read(_timerProvider(totalSeconds).notifier).toggle(),
                 child: Container(
-                  width: 56, height: 56,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
-                    color: AppColors.text.withOpacity(0.08),
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     timer.isRunning ? Icons.pause : Icons.play_arrow,
                     size: 30,
-                    color: AppColors.text,
+                    color: Colors.white,
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               GestureDetector(
-                onTap: () {
-                  final next = activeIndex + 1;
-                  if (next < total) {
-                    ref
-                        .read(_activeExerciseProvider(workout.title)
-                        .notifier)
-                        .state = next;
-                    final nextSecs = _parseDuration(
-                        workout.exercises[next].duration);
-                    ref
-                        .read(_timerProvider(nextSecs).notifier)
-                        .reset(nextSecs);
-                  }
-                },
+                onTap: () => ref
+                    .read(_timerProvider(totalSeconds).notifier)
+                    .reset(totalSeconds),
                 child: Container(
-                  width: 50, height: 50,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(Icons.skip_next,
-                      size: 26, color: Colors.grey.shade500),
+                  child: Icon(Icons.replay,
+                      size: 24, color: Colors.grey.shade500),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 18),
-
-          // GIF placeholder
-          Container(
-            height: 110,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF3FF),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.primary.withOpacity(0.2),
-                width: 1.5,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(activeEx.emoji,
-                    style: const TextStyle(fontSize: 32)),
-                const SizedBox(height: 6),
-                Text(
-                  'Animation / GIF placeholder',
-                  style: TextStyle(
-                    color: AppColors.text.withOpacity(0.4),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -529,9 +753,14 @@ class _TimerCard extends ConsumerWidget {
 
 // ── Nút hoàn thành ─────────────────────────────────────────────────────────────
 class _CompleteButton extends ConsumerWidget {
-  final DayWorkout workout;
+  final PlanWorkout workout;
   final bool isDone;
-  const _CompleteButton({required this.workout, required this.isDone});
+  final String docId;
+  const _CompleteButton({
+    required this.workout,
+    required this.isDone,
+    required this.docId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -542,10 +771,23 @@ class _CompleteButton extends ConsumerWidget {
         onPressed: isDone
             ? null
             : () async {
+          // 1. Cập nhật local state ngay lập tức
           ref
-              .read(_workoutDoneProvider(workout.title).notifier)
+              .read(_workoutDoneProvider(workout.workoutId).notifier)
               .state = true;
-          await _addPoints(context, points: 20);
+
+          // 2. Ghi is_completed = true lên Firestore
+          await ref
+              .read(healthRepoProvider)
+              .markDayCompleted(docId);
+
+          // 3. Invalidate để stats header tự rebuild
+          ref.invalidate(userPlanDaysProvider);
+
+          // 4. Cộng điểm
+          if (context.mounted) {
+            await _addPoints(context, points: 20);
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor:
@@ -580,8 +822,7 @@ class _CompleteButton extends ConsumerWidget {
     );
   }
 
-  Future<void> _addPoints(BuildContext context,
-      {required int points}) async {
+  Future<void> _addPoints(BuildContext context, {required int points}) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
@@ -605,17 +846,22 @@ class _CompleteButton extends ConsumerWidget {
   }
 }
 
-// ── Nhóm cơ ───────────────────────────────────────────────────────────────────
-class _MuscleGroupsCard extends StatelessWidget {
-  final DayWorkout workout;
-  const _MuscleGroupsCard({required this.workout});
+// ── Thông tin chi tiết workout ─────────────────────────────────────────────────
+class _WorkoutInfoCard extends StatelessWidget {
+  final PlanWorkout workout;
+  const _WorkoutInfoCard({required this.workout});
 
   @override
   Widget build(BuildContext context) {
-    final groups = _muscleGroups(workout);
+    final rows = [
+      _Row('💪', 'Nhóm cơ', workout.muscleGroup),
+      _Row('🏷️', 'Thể loại', workout.category),
+      _Row('📊', 'Độ khó', workout.difficultyVi),
+      _Row('⏱️', 'Thời gian', '${workout.durationMin} phút'),
+      _Row('🔥', 'Calo đốt cháy', '${workout.caloriesBurned} cal'),
+    ];
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -630,330 +876,68 @@ class _MuscleGroupsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Nhóm cơ được tập',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.text,
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Thông tin bài tập',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: groups
-                .map(
-                  (g) => Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F4F8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Text(
-                  g,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text.withOpacity(0.75),
+          ...rows.asMap().entries.map((e) {
+            final isLast = e.key == rows.length - 1;
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 13),
+                  child: Row(
+                    children: [
+                      Text(e.value.icon,
+                          style: const TextStyle(fontSize: 18)),
+                      const SizedBox(width: 12),
+                      Text(
+                        e.value.label,
+                        style: TextStyle(
+                          color: AppColors.text.withOpacity(0.55),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        e.value.value,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            )
-                .toList(),
-          ),
+                if (!isLast)
+                  Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: AppColors.text.withOpacity(0.07),
+                  ),
+              ],
+            );
+          }),
+          const SizedBox(height: 4),
         ],
       ),
     );
   }
 }
 
-// ── Accordion danh sách bài tập ────────────────────────────────────────────────
-class _ExerciseAccordion extends ConsumerWidget {
-  final DayWorkout workout;
-  final int activeIndex;
-
-  const _ExerciseAccordion({
-    required this.workout,
-    required this.activeIndex,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final expandedIndex =
-    ref.watch(_expandedExerciseProvider(workout.title));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Tất cả bài tập',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: AppColors.text,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...workout.exercises.asMap().entries.map((entry) {
-          final i        = entry.key;
-          final ex       = entry.value;
-          final isExpanded = expandedIndex == i;
-          final isActive   = i == activeIndex;
-
-          return GestureDetector(
-            onTap: () {
-              ref
-                  .read(_expandedExerciseProvider(workout.title)
-                  .notifier)
-                  .state = isExpanded ? null : i;
-              ref
-                  .read(_activeExerciseProvider(workout.title)
-                  .notifier)
-                  .state = i;
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: isActive
-                    ? Border.all(
-                    color: AppColors.primary.withOpacity(0.4),
-                    width: 1.5)
-                    : null,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44, height: 44,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? AppColors.primary.withOpacity(0.12)
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text(ex.emoji,
-                                style: const TextStyle(fontSize: 20)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                ex.name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: isActive
-                                      ? AppColors.primary
-                                      : AppColors.text,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '${ex.detail} · 🔥 ${ex.calories} calo',
-                                style: TextStyle(
-                                  color: AppColors.text.withOpacity(0.5),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          isExpanded
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          color: Colors.grey.shade400,
-                          size: 22,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (isExpanded)
-                    _ExerciseExpandedContent(exercise: ex),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-// ── Expanded content với Firebase ─────────────────────────────────────────────
-class _ExerciseExpandedContent extends ConsumerWidget {
-  final ExerciseItem exercise;
-  const _ExerciseExpandedContent({required this.exercise});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final asyncDetail = ref.watch(exerciseDetailProvider(exercise.name));
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── GIF / Animation placeholder ──────────────────────────────
-          Container(
-            height: 110,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF3FF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.primary.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: asyncDetail.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              error: (_, __) => _GifPlaceholder(exercise: exercise),
-              data: (detail) {
-                // Sau này: nếu detail?.gifUrl != null → hiển thị Image.network
-                return _GifPlaceholder(exercise: exercise);
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // ── Mô tả từ Firebase ─────────────────────────────────────────
-          asyncDetail.when(
-            loading: () => Container(
-              height: 16,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            error: (_, __) => _DescriptionText(
-              text: 'Đang phát triển — mô tả chi tiết sẽ được cập nhật sớm.',
-              isPlaceholder: true,
-            ),
-            data: (detail) {
-              final desc = detail?.description ?? '';
-              return _DescriptionText(
-                text: desc.isEmpty
-                    ? 'Đang phát triển — mô tả chi tiết sẽ được cập nhật sớm.'
-                    : desc,
-                isPlaceholder: desc.isEmpty,
-              );
-            },
-          ),
-          const SizedBox(height: 10),
-
-          // ── Tags: time + cal luôn có, tags Firebase nếu có ───────────
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _ExTag('⏱ ${exercise.duration}'),
-              _ExTag('🔥 ${exercise.calories} calo'),
-              ...asyncDetail.when(
-                loading: () => <Widget>[],
-                error: (_, __) => <Widget>[],
-                data: (detail) => (detail?.tags ?? [])
-                    .map((t) => _ExTag(t))
-                    .toList(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GifPlaceholder extends StatelessWidget {
-  final ExerciseItem exercise;
-  const _GifPlaceholder({required this.exercise});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(exercise.emoji, style: const TextStyle(fontSize: 30)),
-        const SizedBox(height: 4),
-        Text(
-          'Animation / GIF placeholder',
-          style: TextStyle(
-            color: AppColors.text.withOpacity(0.35),
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DescriptionText extends StatelessWidget {
-  final String text;
-  final bool isPlaceholder;
-  const _DescriptionText({required this.text, this.isPlaceholder = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 13.5,
-        height: 1.55,
-        color: isPlaceholder
-            ? AppColors.text.withOpacity(0.4)
-            : AppColors.text.withOpacity(0.75),
-        fontStyle:
-        isPlaceholder ? FontStyle.italic : FontStyle.normal,
-      ),
-    );
-  }
-}
-
-class _ExTag extends StatelessWidget {
+class _Row {
+  final String icon;
   final String label;
-  const _ExTag(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F4F8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.text.withOpacity(0.7),
-        ),
-      ),
-    );
-  }
+  final String value;
+  const _Row(this.icon, this.label, this.value);
 }

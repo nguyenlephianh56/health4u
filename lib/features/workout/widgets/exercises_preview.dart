@@ -1,45 +1,67 @@
 // lib/features/workout/widgets/exercises_preview.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
+import 'package:health4u/data/repositories/health_repo.dart';
 import '../viewmodels/workout_view_model.dart';
 
-class ExercisesPreview extends StatelessWidget {
+class ExercisesPreview extends ConsumerWidget {
   final int dayIndex;
   const ExercisesPreview({super.key, required this.dayIndex});
 
   @override
-  Widget build(BuildContext context) {
-    final workout = weeklyWorkouts[dayIndex];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncPlan = ref.watch(userPlanDaysProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Danh sách bài tập',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: AppColors.text,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...workout.exercises.map((ex) => _ExerciseTile(exercise: ex)),
-      ],
+    return asyncPlan.when(
+      loading: () => const SizedBox.shrink(),
+      error:   (_, __) => const SizedBox.shrink(),
+      data: (days) {
+        if (dayIndex >= days.length) return const SizedBox.shrink();
+
+        final day = days[dayIndex];
+        if (!day.hasWorkout) return const SizedBox.shrink();
+
+        final w = day.workout!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Thông tin bài tập',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _WorkoutInfoTile(workout: w),
+          ],
+        );
+      },
     );
   }
 }
 
-class _ExerciseTile extends StatelessWidget {
-  final ExerciseItem exercise;
-
-  const _ExerciseTile({required this.exercise});
+/// Tile hiển thị thông tin workout từ plan (category, difficulty, muscle group,
+/// duration, calories) — vì Firebase plan không lưu danh sách exercises riêng lẻ
+class _WorkoutInfoTile extends StatelessWidget {
+  final PlanWorkout workout;
+  const _WorkoutInfoTile({required this.workout});
 
   @override
   Widget build(BuildContext context) {
+    final rows = [
+      _InfoRow('💪', 'Nhóm cơ',      workout.muscleGroup),
+      _InfoRow('🏷️', 'Thể loại',     workout.category),
+      _InfoRow('📊', 'Độ khó',        workout.difficultyVi),
+      _InfoRow('⏱️', 'Thời gian',    '${workout.durationMin} phút'),
+      _InfoRow('🔥', 'Calo đốt cháy','${workout.caloriesBurned} cal'),
+    ];
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -51,90 +73,58 @@ class _ExerciseTile extends StatelessWidget {
           ),
         ],
       ),
+      child: Column(
+        children: rows.asMap().entries.map((entry) {
+          final isLast = entry.key == rows.length - 1;
+          return Column(
+            children: [
+              _buildRow(entry.value),
+              if (!isLast)
+                Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: AppColors.text.withOpacity(0.07),
+                ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildRow(_InfoRow row) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          // Icon emoji
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: Text(
-                exercise.emoji,
-                style: const TextStyle(fontSize: 22),
-              ),
-            ),
-          ),
+          Text(row.icon, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 12),
-
-          // Tên + chi tiết
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  exercise.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  exercise.detail,
-                  style: TextStyle(
-                    color: AppColors.text.withOpacity(0.55),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+          Text(
+            row.label,
+            style: TextStyle(
+              color: AppColors.text.withOpacity(0.55),
+              fontSize: 13,
             ),
           ),
-
-          // Calo + thời gian
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🔥', style: TextStyle(fontSize: 12)),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${exercise.calories} cal',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.timer_outlined,
-                      size: 12,
-                      color: AppColors.text.withOpacity(0.5)),
-                  const SizedBox(width: 3),
-                  Text(
-                    exercise.duration,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.text.withOpacity(0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          const Spacer(),
+          Text(
+            row.value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: AppColors.text,
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _InfoRow {
+  final String icon;
+  final String label;
+  final String value;
+  const _InfoRow(this.icon, this.label, this.value);
 }

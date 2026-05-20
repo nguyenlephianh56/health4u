@@ -3,43 +3,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:health4u/core/constants/app_colors.dart';
+import 'package:health4u/data/repositories/health_repo.dart';
 import '../viewmodels/workout_view_model.dart';
-
-// ── Real-time clock provider (tick mỗi phút để cập nhật ngày nếu qua nửa đêm)
-final _nowProvider = StreamProvider<DateTime>((ref) async* {
-  yield DateTime.now();
-  yield* Stream.periodic(
-    const Duration(minutes: 1),
-        (_) => DateTime.now(),
-  );
-});
-
-// ── Tính ngày thứ 2 của tuần hiện tại ────────────────────────────────────────
-/// Trả về DateTime của thứ 2 đầu tuần (tuần chứa [now])
-DateTime _mondayOf(DateTime now) {
-  return DateTime(now.year, now.month, now.day)
-      .subtract(Duration(days: now.weekday - 1));
-}
-
-/// Danh sách 7 ngày trong tuần (T2 → CN)
-List<DateTime> _weekDays(DateTime now) {
-  final monday = _mondayOf(now);
-  return List.generate(7, (i) => monday.add(Duration(days: i)));
-}
 
 class WeeklyStatsCard extends ConsumerWidget {
   const WeeklyStatsCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDay = ref.watch(selectedDayProvider);
-    final stats       = ref.watch(weeklyStatsProvider);
-    final nowAsync    = ref.watch(_nowProvider);
-
-    final now   = nowAsync.value ?? DateTime.now();
-    final days  = _weekDays(now);
-    // index 0=T2...6=CN, weekday: 1=T2...7=CN
-    final todayIndex = (now.weekday - 1).clamp(0, 6);
+    final selectedIdx = ref.watch(selectedDayIndexProvider);
+    final asyncPlan   = ref.watch(userPlanDaysProvider);
+    final statsAsync  = ref.watch(planWeeklyStatsProvider);
 
     return Container(
       width: double.infinity,
@@ -47,7 +21,7 @@ class WeeklyStatsCard extends ConsumerWidget {
       decoration: const BoxDecoration(
         color: AppColors.primary,
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
+          bottomLeft:  Radius.circular(28),
           bottomRight: Radius.circular(28),
         ),
       ),
@@ -74,111 +48,163 @@ class WeeklyStatsCard extends ConsumerWidget {
           const SizedBox(height: 16),
 
           // ── Thống kê tuần ─────────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _StatItem(
-                  icon: '⏱️',
-                  value: '${stats['minutes']}p',
-                  label: 'Tổng thời gian',
+          statsAsync.when(
+            loading: () => const SizedBox(height: 56),
+            error:   (_, __) => const SizedBox(height: 56),
+            data: (stats) => Row(
+              children: [
+                Expanded(
+                  child: _StatItem(
+                    icon:  '⏱️',
+                    value: '${stats['minutes']}p',
+                    label: 'Tổng thời gian',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatItem(
-                  icon: '🔥',
-                  value: '${stats['calories']}',
-                  label: 'Calo',
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatItem(
+                    icon:  '🔥',
+                    value: '${stats['calories']}',
+                    label: 'Calo',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatItem(
-                  icon: '✅',
-                  value: '${stats['done']}/${stats['total']}',
-                  label: 'Hoàn thành',
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatItem(
+                    icon:  '✅',
+                    value: '${stats['done']}/${stats['total']}',
+                    label: 'Hoàn thành',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 
-          // ── Chọn ngày (real-time) ─────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(7, (i) {
-              final workout    = weeklyWorkouts[i];
-              final day        = days[i];
-              final isSelected = i == selectedDay;
-              final isToday    = i == todayIndex;
+          // ── Chọn ngày theo plan Firebase ──────────────────────────────
+          asyncPlan.when(
+            loading: () => _buildDaySkeleton(),
+            error:   (_, __) => const SizedBox.shrink(),
+            data: (days) {
+              if (days.isEmpty) return const SizedBox.shrink();
 
-              // Tên thứ viết tắt
-              const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(days.length, (i) {
+                    final day        = days[i];
+                    final isSelected = i == selectedIdx;
+                    final isToday    = _isToday(day.date);
 
-              return GestureDetector(
-                onTap: () =>
-                ref.read(selectedDayProvider.notifier).state = i,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 8, horizontal: 7),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Thứ viết tắt
-                      Text(
-                        dayLabels[i],
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                    return GestureDetector(
+                      onTap: () =>
+                      ref.read(selectedDayIndexProvider.notifier).state = i,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 10),
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.primary
-                              : Colors.white.withOpacity(0.85),
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Thứ viết tắt
+                            Text(
+                              day.dayShortLabel,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : Colors.white.withOpacity(0.85),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            // Số ngày trong tháng
+                            Text(
+                              _dayNum(day.date),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            // Emoji category hoặc nghỉ
+                            Text(
+                              day.hasWorkout
+                                  ? day.workout!.emoji
+                                  : '😴',
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                            // Dot indicator ngày hôm nay
+                            if (isToday) ...[
+                              const SizedBox(height: 3),
+                              CircleAvatar(
+                                radius: 2.5,
+                                backgroundColor: isSelected
+                                    ? AppColors.primary
+                                    : Colors.white,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      // Số ngày thật
-                      Text(
-                        '${day.day}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: isSelected
-                              ? AppColors.primary
-                              : Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      // Emoji icon bài tập
-                      Text(
-                        workout.emoji,
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                      // Dot indicator ngày hôm nay
-                      if (isToday) ...[
-                        const SizedBox(height: 3),
-                        CircleAvatar(
-                          radius: 2.5,
-                          backgroundColor: isSelected
-                              ? AppColors.primary
-                              : Colors.white,
-                        ),
-                      ],
-                    ],
-                  ),
+                    );
+                  }),
                 ),
               );
-            }),
+            },
           ),
         ],
       ),
     );
+  }
+
+  /// Skeleton khi đang load
+  Widget _buildDaySkeleton() {
+    return Row(
+      children: List.generate(
+        5,
+            (_) => Container(
+          margin: const EdgeInsets.only(right: 8),
+          width: 44,
+          height: 72,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "2026-05-18" → "18"
+  String _dayNum(String date) {
+    try {
+      return date.split('-')[2];
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Kiểm tra date string có phải hôm nay không
+  bool _isToday(String date) {
+    try {
+      final now = DateTime.now();
+      final todayStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      return date == todayStr;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -204,7 +230,6 @@ class _StatItem extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
