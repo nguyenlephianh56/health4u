@@ -1,3 +1,5 @@
+// lib/features/nutrition/widgets/meal_card.dart
+
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../views/cooking_detail_screen.dart';

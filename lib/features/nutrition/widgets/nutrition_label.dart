@@ -1,3 +1,5 @@
+// lib/features/nutrition/widgets/nutrition_label.dart
+
 import 'package:flutter/material.dart';
 
 class NutritionLabel extends StatelessWidget {

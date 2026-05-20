@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/models/nutrition_models.dart';
 import '../viewmodels/nutrition_viewmodel.dart';
 import '../widgets/meal_card.dart';
 
@@ -104,6 +105,11 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
     super.dispose();
   }
 
+  Future<void> _onRefresh() async {
+    final weekStart = ref.read(weekStartProvider);
+    await ref.read(nutritionViewModelProvider.notifier).loadWeek(weekStart);
+  }
+
   @override
   Widget build(BuildContext context) {
     final nutritionState = ref.watch(nutritionViewModelProvider);
@@ -119,39 +125,46 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.vertical(
-                    bottom: Radius.circular(28),
+        child: RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: AppColors.primary,
+          backgroundColor: Colors.white,
+          strokeWidth: 2.5,
+          displacement: 20,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(28),
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                  child: Column(
+                    children: [
+                      _buildHeader(weekStart),
+                      const SizedBox(height: 14),
+                      _buildCalendar(selIdx, weekStart),
+                    ],
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-                child: Column(
-                  children: [
-                    _buildHeader(weekStart),
-                    const SizedBox(height: 14),
-                    _buildCalendar(selIdx, weekStart),
-                  ],
-                ),
               ),
-            ),
 
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                child: _buildBody(
-                  nutritionState,
-                  dayData,
-                  selIdx,
-                  selDate,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                  child: _buildBody(
+                    nutritionState,
+                    dayData,
+                    selIdx,
+                    selDate,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -226,15 +239,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
       int selIdx,
       DateTime weekStart,
       ) {
-    const names = [
-      'T2',
-      'T3',
-      'T4',
-      'T5',
-      'T6',
-      'T7',
-      'CN',
-    ];
+    const names = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
     final todayStr =
     DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -422,10 +427,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
               if (day.breakfast.isNotEmpty) ...[
                 _mealLabel('🌅 Bữa sáng'),
                 ...day.breakfast.map(
-                      (e) => _buildMealCard(
-                    e,
-                    selDate,
-                  ),
+                      (e) => _buildMealCard(e, selDate),
                 ),
                 const SizedBox(height: 4),
               ],
@@ -433,10 +435,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
               if (day.lunch.isNotEmpty) ...[
                 _mealLabel('☀️ Bữa trưa'),
                 ...day.lunch.map(
-                      (e) => _buildMealCard(
-                    e,
-                    selDate,
-                  ),
+                      (e) => _buildMealCard(e, selDate),
                 ),
                 const SizedBox(height: 4),
               ],
@@ -444,10 +443,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
               if (day.dinner.isNotEmpty) ...[
                 _mealLabel('🌙 Bữa tối'),
                 ...day.dinner.map(
-                      (e) => _buildMealCard(
-                    e,
-                    selDate,
-                  ),
+                      (e) => _buildMealCard(e, selDate),
                 ),
                 const SizedBox(height: 4),
               ],
@@ -455,10 +451,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
               if (day.snack.isNotEmpty) ...[
                 _mealLabel('🍎 Bữa phụ'),
                 ...day.snack.map(
-                      (e) => _buildMealCard(
-                    e,
-                    selDate,
-                  ),
+                      (e) => _buildMealCard(e, selDate),
                 ),
               ],
             ],
@@ -474,17 +467,11 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
       DateTime weekStart,
       ) {
     const dayNames = [
-      'Thứ Hai',
-      'Thứ Ba',
-      'Thứ Tư',
-      'Thứ Năm',
-      'Thứ Sáu',
-      'Thứ Bảy',
-      'Chủ Nhật',
+      'Thứ Hai', 'Thứ Ba', 'Thứ Tư',
+      'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật',
     ];
 
-    final date =
-    weekStart.add(Duration(days: idx));
+    final date = weekStart.add(Duration(days: idx));
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -660,7 +647,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
               ),
             ),
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'Ngày này chưa được lên thực đơn',
               style: TextStyle(
                 fontSize: 13,
@@ -675,7 +662,6 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
 
   Widget _buildDaySummarySkeleton() {
     return Container(
-      // height: 110,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -692,30 +678,18 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
             mainAxisAlignment:
             MainAxisAlignment.spaceBetween,
             children: [
-              _shimmer(
-                width: 100,
-                height: 18,
-              ),
-              _shimmer(
-                width: 60,
-                height: 28,
-              ),
+              _shimmer(width: 100, height: 18),
+              _shimmer(width: 60, height: 28),
             ],
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(
-                child: _shimmer(height: 40),
-              ),
+              Expanded(child: _shimmer(height: 40)),
               const SizedBox(width: 10),
-              Expanded(
-                child: _shimmer(height: 40),
-              ),
+              Expanded(child: _shimmer(height: 40)),
               const SizedBox(width: 10),
-              Expanded(
-                child: _shimmer(height: 40),
-              ),
+              Expanded(child: _shimmer(height: 40)),
             ],
           ),
         ],
@@ -738,11 +712,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            _shimmer(
-              width: 78,
-              height: 64,
-              radius: 14,
-            ),
+            _shimmer(width: 78, height: 64, radius: 14),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -751,20 +721,11 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
                 mainAxisAlignment:
                 MainAxisAlignment.center,
                 children: [
-                  _shimmer(
-                    width: 140,
-                    height: 14,
-                  ),
+                  _shimmer(width: 140, height: 14),
                   const SizedBox(height: 8),
-                  _shimmer(
-                    width: 100,
-                    height: 12,
-                  ),
+                  _shimmer(width: 100, height: 12),
                   const SizedBox(height: 8),
-                  _shimmer(
-                    width: 80,
-                    height: 18,
-                  ),
+                  _shimmer(width: 80, height: 18),
                 ],
               ),
             ),
