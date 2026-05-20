@@ -14,7 +14,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_colors.dart';
-import '../data/repositories/auth_repo.dart';   // ✅ đúng kiến trúc
+import '../data/repositories/auth_repo.dart';
+import '../features/home/viewmodels/home_viewmodel.dart';
+import '../features/home/viewmodels/home_state.dart';
+import '../features/nutrition/viewmodels/nutrition_viewmodel.dart';
+import '../features/grocery/viewmodels/grocery_viewmodel.dart';
+import '../features/profile/viewmodels/profile_viewmodel.dart';
+import '../features/admin/viewmodels/admin_viewmodel.dart';
 import 'app_router.dart';
 
 class ShellScaffold extends ConsumerWidget {
@@ -97,7 +103,7 @@ class ShellScaffold extends ConsumerWidget {
 }
 
 // ─── Bottom Navigation Widget ────────────────────────────────────────────────
-class _BottomNav extends StatelessWidget {
+class _BottomNav extends ConsumerWidget {
   final List<_TabItem> tabs;
   final int activeIndex;
 
@@ -107,7 +113,7 @@ class _BottomNav extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -133,7 +139,27 @@ class _BottomNav extends StatelessWidget {
 
               return Expanded(
                 child: GestureDetector(
-                  onTap: () => context.go(tab.route),
+                  onTap: () {
+                    switch (tab.route) {
+                      case AppRoutes.home:
+                        ref.invalidate(homeViewModelProvider);
+                      case AppRoutes.meals:
+                      // Dùng loadWeek thay vì invalidate —
+                      // có cache thì refresh ngầm, không show skeleton
+                        final weekStart = ref.read(weekStartProvider);
+                        ref.read(nutritionViewModelProvider.notifier)
+                            .loadWeek(weekStart);
+                      case AppRoutes.grocery:
+                        ref.invalidate(groceryViewModelProvider);
+                      case AppRoutes.profile:
+                        ref.invalidate(profileViewModelProvider);
+                      case AppRoutes.admin:
+                        ref.invalidate(adminViewModelProvider);
+                      case AppRoutes.workout:
+                        break;
+                    }
+                    context.go(tab.route);
+                  },
                   behavior: HitTestBehavior.opaque,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

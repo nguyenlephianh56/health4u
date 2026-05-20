@@ -1,8 +1,4 @@
 // lib/features/nutrition/viewmodels/nutrition_viewmodel.dart
-//
-// State, ViewModel và Providers cho feature Nutrition.
-// Models (DailyTracking, MealEntry, DayNutrition) đã tách sang:
-//   → lib/features/nutrition/models/nutrition_models.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,11 +16,13 @@ import '../../../data/models/nutrition_models.dart';
 
 class NutritionState {
   final bool isLoading;
+  final bool isRefreshing; // load ngầm — vẫn hiện data cũ
   final String? errorMessage;
   final Map<String, DayNutrition> weekData;
 
   const NutritionState({
     this.isLoading    = true,
+    this.isRefreshing = false,
     this.errorMessage,
     this.weekData     = const {},
   });
@@ -36,11 +34,13 @@ class NutritionState {
 
   NutritionState copyWith({
     bool? isLoading,
+    bool? isRefreshing,
     String? errorMessage,
     Map<String, DayNutrition>? weekData,
   }) =>
       NutritionState(
         isLoading:    isLoading    ?? this.isLoading,
+        isRefreshing: isRefreshing ?? this.isRefreshing,
         errorMessage: errorMessage,
         weekData:     weekData     ?? this.weekData,
       );
@@ -74,12 +74,17 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, errorMessage: null);
+    // Nếu đã có cache → refresh ngầm, không xoá data cũ, không show skeleton
+    final hasCache = state.weekData.isNotEmpty;
+    state = state.copyWith(
+      isLoading:    !hasCache,
+      isRefreshing: hasCache,
+      errorMessage: null,
+    );
 
     try {
       final dates = List.generate(7, (i) => weekStart.add(Duration(days: i)));
 
-      // Fetch user_plans và daily_tracking song song cho cả 7 ngày
       final results = await Future.wait([
         Future.wait(
           dates.map((d) => _db
@@ -98,7 +103,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       final planDocs     = results[0];
       final trackingDocs = results[1];
 
-      // Log kết quả
       for (int i = 0; i < planDocs.length; i++) {
         final doc = planDocs[i];
         if (doc.exists && doc.data() != null) {
@@ -116,7 +120,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         }
       }
 
-      // Thu thập recipe_id chưa cache
       final toFetch = <String>{};
       for (final doc in planDocs) {
         if (!doc.exists || doc.data() == null) continue;
@@ -128,7 +131,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         }
       }
 
-      // Batch-fetch recipe details
       if (toFetch.isNotEmpty) {
         debugPrint('[NutritionVM] fetch recipes: $toFetch');
         final recipeDocs = await Future.wait(
@@ -139,7 +141,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         }
       }
 
-      // Build weekData
       final newWeekData = <String, DayNutrition>{};
       for (int i = 0; i < 7; i++) {
         final dateStr = _fmt.format(dates[i]);
@@ -154,18 +155,26 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       debugPrint('[NutritionVM] ✅ DONE');
       debugPrint('═══════════════════════════════════════════════');
 
-      state = NutritionState(isLoading: false, weekData: newWeekData);
+      state = NutritionState(
+        isLoading:    false,
+        isRefreshing: false,
+        weekData:     newWeekData,
+      );
     } on FirebaseException catch (e) {
       debugPrint('[NutritionVM] ❌ FirebaseException [${e.code}]: ${e.message}');
       state = NutritionState(
-        isLoading: false,
+        isLoading:    false,
+        isRefreshing: false,
         errorMessage: 'Firebase lỗi [${e.code}]: ${e.message}',
+        weekData:     state.weekData, // giữ data cũ khi lỗi
       );
     } catch (e, st) {
       debugPrint('[NutritionVM] ❌ Exception: $e\n$st');
       state = NutritionState(
-        isLoading: false,
+        isLoading:    false,
+        isRefreshing: false,
         errorMessage: 'Không thể tải kế hoạch: $e',
+        weekData:     state.weekData, // giữ data cũ khi lỗi
       );
     }
   }
@@ -178,7 +187,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
     try {
       final dateKey = _fmt.format(date);
 
-      // Fetch song song cả plan lẫn tracking
       final results = await Future.wait([
         _db.collection('user_plans').doc('${uid}_$dateKey').get(),
         _db.collection('daily_tracking').doc('${uid}_$dateKey').get(),
@@ -268,7 +276,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       DocumentSnapshot planDoc,
       DocumentSnapshot trackingDoc,
       ) {
-    // Parse daily_tracking
     final tracking = DailyTracking.fromDoc(trackingDoc);
 
     if (!planDoc.exists || planDoc.data() == null) {
@@ -360,15 +367,10 @@ final selectedDateProvider = Provider<DateTime>((ref) {
   return weekStart.add(Duration(days: index));
 });
 
-/// ── KEY FIX ──────────────────────────────────────────────────────────────────
-/// Dùng ref.listen(authRepoProvider) THAY VÌ fireImmediately: true
-/// → Đảm bảo loadWeek chỉ chạy SAU KHI Firebase Auth restore session xong
-/// ─────────────────────────────────────────────────────────────────────────────
 final nutritionViewModelProvider =
 StateNotifierProvider<NutritionViewModel, NutritionState>((ref) {
   final vm = NutritionViewModel(ref);
 
-  // Lắng nghe auth: chỉ load khi đã có userId (authenticated)
   ref.listen(authRepoProvider, (previous, next) {
     if (next.isAuthenticated && next.userId != null) {
       vm.loadWeek(ref.read(weekStartProvider));
@@ -378,7 +380,6 @@ StateNotifierProvider<NutritionViewModel, NutritionState>((ref) {
     }
   });
 
-  // Lắng nghe đổi tuần (user bấm < >)
   ref.listen<DateTime>(weekStartProvider, (previous, weekStart) {
     final auth = ref.read(authRepoProvider);
     if (auth.isAuthenticated && auth.userId != null) {
