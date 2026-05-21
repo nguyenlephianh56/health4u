@@ -131,7 +131,8 @@ class WorkoutCard extends ConsumerWidget {
                           builder: (_) => ExerciseDetailScreen(
                             workout:   w,
                             date:      day.date,
-                            dayOfWeek: day.dayOfWeek, docId: '',
+                            dayOfWeek: day.dayOfWeek,
+                            docId:     day.docId,
                           ),
                         ),
                       );

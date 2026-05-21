@@ -146,10 +146,12 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
       'weight_kg':      null,
       'activity_level': null,
       'goal':           null,
-      'current_streak': 0,
-      'total_points':   0,
-      'avatar_url':     null,
-      'created_at':     FieldValue.serverTimestamp(),
+      'current_streak':   0,
+      'best_streak':      0,
+      'last_streak_date': '',
+      'total_points':     0,
+      'avatar_url':       null,
+      'created_at':       FieldValue.serverTimestamp(),
     });
 
     await credential.user!.updateDisplayName(name.trim());

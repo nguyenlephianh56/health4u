@@ -11,8 +11,10 @@ import 'package:health4u/data/repositories/health_repo.dart';
 import '../viewmodels/workout_view_model.dart';
 
 // ── Providers ──────────────────────────────────────────────────────────────────
-final _workoutDoneProvider =
-StateProvider.family<bool, String>((ref, id) => false);
+// Optimistic: set true NGAY KHI bấm, không reset khi screen dispose.
+// Firestore ghi ở background — UI không chờ.
+final _optimisticDoneProvider =
+StateProvider.family<bool, String>((ref, docId) => false);
 
 // ── Timer ──────────────────────────────────────────────────────────────────────
 class TimerState {
@@ -106,8 +108,14 @@ class ExerciseDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDone = ref.watch(_workoutDoneProvider(workout.workoutId));
-    final timer  = ref.watch(_timerProvider(_totalSeconds));
+    // isDone = true nếu Firestore đã xác nhận HOẶC user vừa bấm (optimistic)
+    final firestoreDone = ref.watch(userPlanDaysProvider).maybeWhen(
+      data: (days) => days.any((d) => d.date == date && d.isCompleted),
+      orElse: () => false,
+    );
+    final optimisticDone = ref.watch(_optimisticDoneProvider(docId));
+    final isDone = optimisticDone || firestoreDone;
+    final timer = ref.watch(_timerProvider(_totalSeconds));
 
     return Scaffold(
       backgroundColor: const Color(0xFFEAF3FF),
@@ -131,6 +139,7 @@ class ExerciseDetailScreen extends ConsumerWidget {
                     workout: workout,
                     isDone: isDone,
                     docId: docId,
+                    date: date,
                   ),
                   const SizedBox(height: 16),
                   _WorkoutInfoCard(workout: workout),
@@ -756,10 +765,12 @@ class _CompleteButton extends ConsumerWidget {
   final PlanWorkout workout;
   final bool isDone;
   final String docId;
+  final String date;
   const _CompleteButton({
     required this.workout,
     required this.isDone,
     required this.docId,
+    required this.date,
   });
 
   @override
@@ -770,24 +781,26 @@ class _CompleteButton extends ConsumerWidget {
       child: ElevatedButton(
         onPressed: isDone
             ? null
-            : () async {
-          // 1. Cập nhật local state ngay lập tức
-          ref
-              .read(_workoutDoneProvider(workout.workoutId).notifier)
-              .state = true;
-
-          // 2. Ghi is_completed = true lên Firestore
-          await ref
-              .read(healthRepoProvider)
-              .markDayCompleted(docId);
-
-          // 3. Invalidate để stats header tự rebuild
-          ref.invalidate(userPlanDaysProvider);
-
-          // 4. Cộng điểm
-          if (context.mounted) {
-            await _addPoints(context, points: 20);
+            : () {
+          if (docId.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Không tìm thấy dữ liệu ngày tập'),
+                backgroundColor: Colors.red.shade400,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+            return;
           }
+
+          // ✅ BƯỚC 1: Đổi UI NGAY LẬP TỨC — không await gì cả
+          ref.read(_optimisticDoneProvider(docId).notifier).state = true;
+
+          // ✅ BƯỚC 2: Ghi Firestore + cộng điểm ở BACKGROUND
+          // Không await ở đây → UI không bị block
+          _commitToFirestore(context, ref);
         },
         style: ElevatedButton.styleFrom(
           backgroundColor:
@@ -822,18 +835,23 @@ class _CompleteButton extends ConsumerWidget {
     );
   }
 
-  Future<void> _addPoints(BuildContext context, {required int points}) async {
+  /// Ghi Firestore + cộng điểm hoàn toàn ở background.
+  /// Nếu lỗi → rollback optimistic, hiển thị snackbar.
+  Future<void> _commitToFirestore(BuildContext context, WidgetRef ref) async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'total_points': FieldValue.increment(points)});
+      // Ghi is_completed = true vào Firestore
+      await ref.read(healthRepoProvider).markDayCompleted(docId);
+
+      // Invalidate để streak ở header tự cập nhật (chạy sau khi UI đã đổi rồi)
+      ref.invalidate(userPlanDaysProvider);
+
+      // Cộng điểm
+      await _addPoints(points: 20);
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🎉 Bạn vừa nhận được +$points điểm!'),
+            content: const Text('🎉 Bạn vừa nhận được +20 điểm!'),
             backgroundColor: AppColors.primary,
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
@@ -842,6 +860,31 @@ class _CompleteButton extends ConsumerWidget {
           ),
         );
       }
+    } catch (e) {
+      // Rollback nếu ghi thất bại
+      ref.read(_optimisticDoneProvider(docId).notifier).state = false;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi: $e'),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addPoints({required int points}) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'total_points': FieldValue.increment(points)});
     } catch (_) {}
   }
 }

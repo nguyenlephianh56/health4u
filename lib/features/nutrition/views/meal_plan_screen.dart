@@ -1,7 +1,5 @@
 // lib/features/nutrition/views/meal_plan_screen.dart
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -245,109 +243,99 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen>
     DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     return Container(
-      height: 92,
+      height: 80,
       decoration: BoxDecoration(
         color: const Color(0xFF0273B0),
         borderRadius: BorderRadius.circular(20),
       ),
       padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 8,
+        horizontal: 6,
+        vertical: 6,
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final itemWidth = math.min(
-            (constraints.maxWidth - 36) / 7,
-            52.0,
-          );
+      child: Row(
+        children: List.generate(7, (i) {
+          final date =
+          weekStart.add(Duration(days: i));
 
-          return Row(
-            children: List.generate(7, (i) {
-              final date =
-              weekStart.add(Duration(days: i));
+          final isSelected = i == selIdx;
 
-              final isSelected = i == selIdx;
+          final isToday =
+              DateFormat('yyyy-MM-dd').format(date) ==
+                  todayStr;
 
-              final isToday =
-                  DateFormat('yyyy-MM-dd').format(date) ==
-                      todayStr;
-
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => _onDayTap(i),
-                  child: AnimatedContainer(
-                    duration: const Duration(
-                      milliseconds: 200,
-                    ),
-                    width: itemWidth,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                    ),
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      border: isToday && !isSelected
-                          ? Border.all(
-                        color: Colors.white,
-                        width: 2,
-                      )
-                          : null,
-                    ),
-                    child: Column(
-                      mainAxisAlignment:
-                      MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          names[i],
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? AppColors.primary
-                                : Colors.white70,
-                          ),
-                        ),
-
-                        const SizedBox(height: 1),
-
-                        Text(
-                          '${date.day}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected
-                                ? AppColors.primary
-                                : Colors.white,
-                          ),
-                        ),
-
-                        if (isToday) ...[
-                          const SizedBox(height: 2),
-                          Container(
-                            width: 4,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : Colors.white,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => _onDayTap(i),
+              child: AnimatedContainer(
+                duration: const Duration(
+                  milliseconds: 200,
                 ),
-              );
-            }),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                ),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  border: isToday && !isSelected
+                      ? Border.all(
+                    color: Colors.white,
+                    width: 2,
+                  )
+                      : null,
+                ),
+                child: Column(
+                  mainAxisAlignment:
+                  MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      names[i],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected
+                            ? AppColors.primary
+                            : Colors.white70,
+                      ),
+                    ),
+
+                    const SizedBox(height: 2),
+
+                    Text(
+                      '${date.day}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? AppColors.primary
+                            : Colors.white,
+                      ),
+                    ),
+
+                    if (isToday) ...[
+                      const SizedBox(height: 2),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? AppColors.primary
+                              : Colors.white,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           );
-        },
+        }),
       ),
     );
   }

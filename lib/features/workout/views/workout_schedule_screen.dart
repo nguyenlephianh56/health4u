@@ -17,10 +17,28 @@ class WorkoutScheduleScreen extends ConsumerStatefulWidget {
 
 class _WorkoutScheduleScreenState
     extends ConsumerState<WorkoutScheduleScreen> {
+  bool _autoSelectedToday = false;
+
   @override
   Widget build(BuildContext context) {
     final asyncPlan = ref.watch(userPlanDaysProvider);
     final selectedIdx = ref.watch(selectedDayIndexProvider);
+
+    // Tự động chọn ngày hôm nay 1 lần duy nhất khi data load xong
+    ref.listen<AsyncValue<List<UserPlanDay>>>(userPlanDaysProvider, (_, next) {
+      if (_autoSelectedToday) return;
+      next.whenData((days) {
+        final today = DateTime.now();
+        final todayStr =
+            '${today.year}-${today.month.toString().padLeft(2, '0')}-'
+            '${today.day.toString().padLeft(2, '0')}';
+        final idx = days.indexWhere((d) => d.date == todayStr);
+        if (idx >= 0) {
+          ref.read(selectedDayIndexProvider.notifier).state = idx;
+        }
+        _autoSelectedToday = true;
+      });
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -60,22 +78,17 @@ class _WorkoutScheduleScreenState
 
           final day = days[selectedIdx.clamp(0, days.length - 1)];
 
-          return NestedScrollView(
-            physics: const BouncingScrollPhysics(),
-            headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          return CustomScrollView(
+            physics: const ClampingScrollPhysics(),
+            slivers: [
               SliverToBoxAdapter(
                 child: _WeeklyHeader(days: days),
               ),
+              if (day.hasWorkout)
+                _WorkoutDaySliver(day: day, workout: day.workout!)
+              else
+                _RestDaySliver(day: day),
             ],
-            body: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: KeyedSubtree(
-                key: ValueKey(selectedIdx),
-                child: day.hasWorkout
-                    ? _WorkoutDayPage(day: day, workout: day.workout!)
-                    : _RestDayPage(day: day),
-              ),
-            ),
           );
         },
       ),
@@ -180,86 +193,84 @@ class _WeeklyHeader extends ConsumerWidget {
               const SizedBox(height: 14),
 
               // ── Hàng chọn ngày: container nền tối nổi lên ─────────────
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(days.length, (i) {
-                        final day        = days[i];
-                        final isSelected = i == selectedIdx;
-                        final isToday    = _isToday(day.date);
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: List.generate(days.length, (i) {
+                    final day        = days[i];
+                    final isSelected = i == selectedIdx;
+                    final isToday    = _isToday(day.date);
 
-                        return GestureDetector(
-                          onTap: () =>
-                          ref.read(selectedDayIndexProvider.notifier).state = i,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 8, horizontal: 11),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Colors.white
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(14),
-                              border: isToday && !isSelected
-                                  ? Border.all(
-                                  color: Colors.white.withOpacity(0.6),
-                                  width: 1.5)
-                                  : null,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Thứ (T2, T3, … CN)
-                                Text(
-                                  day.dayShortLabel,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected
-                                        ? AppColors.primary
-                                        : Colors.white.withOpacity(0.8),
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                // Số ngày trong tháng
-                                Text(
-                                  _dayNum(day.date),
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w900,
-                                    color: isSelected
-                                        ? AppColors.primary
-                                        : Colors.white,
-                                  ),
-                                ),
-                                // Dot hôm nay
-                                if (isToday) ...[
-                                  const SizedBox(height: 3),
-                                  CircleAvatar(
-                                    radius: 2.5,
-                                    backgroundColor: isSelected
-                                        ? AppColors.primary
-                                        : Colors.white,
-                                  ),
-                                ],
-                              ],
-                            ),
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                        ref.read(selectedDayIndexProvider.notifier).state = i,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            border: isToday && !isSelected
+                                ? Border.all(
+                                color: Colors.white,
+                                width: 2)
+                                : null,
                           ),
-                        );
-                      }),
-                    ),
-                  ),
-                ), // Container
-              ), // Center
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Thứ (T2, T3, … CN)
+                              Text(
+                                day.dayShortLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : Colors.white.withOpacity(0.8),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              // Số ngày trong tháng
+                              Text(
+                                _dayNum(day.date),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : Colors.white,
+                                ),
+                              ),
+                              // Dot hôm nay
+                              if (isToday) ...[
+                                const SizedBox(height: 3),
+                                CircleAvatar(
+                                  radius: 2.5,
+                                  backgroundColor: isSelected
+                                      ? AppColors.primary
+                                      : Colors.white,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ), // Container
             ],
           ),
         ),
@@ -352,44 +363,39 @@ class _StatBox extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Ngày nghỉ
 // ─────────────────────────────────────────────────────────────────────────────
-class _RestDayPage extends StatelessWidget {
+class _RestDaySliver extends StatelessWidget {
   final UserPlanDay day;
-  const _RestDayPage({required this.day});
+  const _RestDaySliver({required this.day});
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('😴', style: TextStyle(fontSize: 64)),
-                const SizedBox(height: 16),
-                const Text(
-                  'Ngày nghỉ ngơi',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Hãy thư giãn và phục hồi sức lực!',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.text.withOpacity(0.5),
-                  ),
-                ),
-              ],
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('😴', style: TextStyle(fontSize: 64)),
+            const SizedBox(height: 16),
+            const Text(
+              'Ngày nghỉ ngơi',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'Hãy thư giãn và phục hồi sức lực!',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.text.withOpacity(0.5),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -397,51 +403,46 @@ class _RestDayPage extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Ngày có workout: card ảnh + exercises list + nút bắt đầu (ảnh 1 + 2)
 // ─────────────────────────────────────────────────────────────────────────────
-class _WorkoutDayPage extends ConsumerWidget {
+class _WorkoutDaySliver extends ConsumerWidget {
   final UserPlanDay day;
   final PlanWorkout workout;
-  const _WorkoutDayPage({required this.day, required this.workout});
+  const _WorkoutDaySliver({required this.day, required this.workout});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Fetch workout đầy đủ kèm exercises
     final asyncDetail = ref.watch(workoutDetailProvider(workout.workoutId));
 
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              // ── Card banner (ảnh 1 - phần dưới) ──────────────────────────
-              _WorkoutBannerCard(workout: workout),
-              const SizedBox(height: 20),
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          // ── Card banner (ảnh 1 - phần dưới) ──────────────────────────
+          _WorkoutBannerCard(workout: workout),
+          const SizedBox(height: 20),
 
-              // ── Exercises Preview (ảnh 2) ─────────────────────────────────
-              asyncDetail.when(
-                loading: () => const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (detail) {
-                  if (detail == null || detail.exercises.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return _ExercisesSection(
-                    workout: workout,
-                    exercises: detail.exercises,
-                    day: day,
-                  );
-                },
+          // ── Exercises Preview (ảnh 2) ─────────────────────────────────
+          asyncDetail.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
-            ]),
+            ),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (detail) {
+              if (detail == null || detail.exercises.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return _ExercisesSection(
+                workout: workout,
+                exercises: detail.exercises,
+                day: day,
+              );
+            },
           ),
-        ),
-      ],
+        ]),
+      ),
     );
   }
 }

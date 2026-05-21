@@ -11,9 +11,16 @@ class UserModel {
   final String? activityLevel;
   final String? goal;
   final int currentStreak;
+
+  /// Streak dài nhất mà user đạt được (không bao giờ giảm)
+  final int bestStreak;
+
+  /// Ngày cuối cùng được tính streak (format yyyy-MM-dd)
+  /// Dùng để kiểm tra có được tính streak hôm nay chưa
+  final String lastStreakDate;
+
   final int totalPoints;
   final String? avatarUrl;
-
   final int shieldCount;
   final String? activeTagName;
 
@@ -28,6 +35,8 @@ class UserModel {
     this.activityLevel,
     this.goal,
     this.currentStreak = 0,
+    this.bestStreak = 0,
+    this.lastStreakDate = '',
     this.totalPoints = 0,
     this.avatarUrl,
     this.shieldCount = 0,
@@ -46,9 +55,10 @@ class UserModel {
       activityLevel: data['activity_level']?.toString(),
       goal: data['goal']?.toString(),
       currentStreak: (data['current_streak'] as num?)?.toInt() ?? 0,
+      bestStreak: (data['best_streak'] as num?)?.toInt() ?? 0,
+      lastStreakDate: data['last_streak_date']?.toString() ?? '',
       totalPoints: (data['total_points'] as num?)?.toInt() ?? 0,
       avatarUrl: data['avatar_url']?.toString(),
-
       shieldCount: (data['shield_count'] as num?)?.toInt() ?? 0,
       activeTagName: data['active_tag_name']?.toString(),
     );
@@ -64,9 +74,10 @@ class UserModel {
     'activity_level': activityLevel,
     'goal': goal,
     'current_streak': currentStreak,
+    'best_streak': bestStreak,
+    'last_streak_date': lastStreakDate,
     'total_points': totalPoints,
     'avatar_url': avatarUrl,
-
     'shield_count': shieldCount,
     'active_tag_name': activeTagName,
   };
@@ -88,6 +99,8 @@ class UserModel {
     String? name,
     String? avatarUrl,
     int? currentStreak,
+    int? bestStreak,
+    String? lastStreakDate,
     int? totalPoints,
     int? shieldCount,
     String? activeTagName,
@@ -105,9 +118,10 @@ class UserModel {
       activityLevel: activityLevel ?? this.activityLevel,
       goal: goal ?? this.goal,
       currentStreak: currentStreak ?? this.currentStreak,
+      bestStreak: bestStreak ?? this.bestStreak,
+      lastStreakDate: lastStreakDate ?? this.lastStreakDate,
       totalPoints: totalPoints ?? this.totalPoints,
       avatarUrl: avatarUrl ?? this.avatarUrl,
-
       shieldCount: shieldCount ?? this.shieldCount,
       activeTagName: activeTagName ?? this.activeTagName,
     );

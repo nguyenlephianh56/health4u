@@ -52,23 +52,19 @@ class ProfileScreen extends ConsumerWidget {
                 if (state.user != null) ...[
                   GoalsWidget(user: state.user!, tracking: state.tracking),
                   const SizedBox(height: 16),
-                  StreakWidget(user: state.user!),
+
+                  // ✅ Fix: bỏ truyền user — StreakWidget tự đọc realtime
+                  const StreakWidget(),
                   const SizedBox(height: 16),
 
-                  // ── Reward Shop preview ──────────────────────────────────
-                  // Truyền ref xuống để widget tự navigate + refresh
                   RewardShopPreviewWidget(
                     uid: state.user!.id,
                     onReturn: () {
-                      // Gọi refreshProfile() khi quay về từ RewardShopScreen
-                      // → Không gây loading giật, chỉ patch user trong state
                       ref
                           .read(profileViewModelProvider.notifier)
                           .refreshProfile();
                     },
                   ),
-                  // ────────────────────────────────────────────────────────
-
                   const SizedBox(height: 16),
                   const HowToEarnWidget(),
                   const SizedBox(height: 16),

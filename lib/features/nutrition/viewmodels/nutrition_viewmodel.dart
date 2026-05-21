@@ -1,8 +1,7 @@
 // lib/features/nutrition/viewmodels/nutrition_viewmodel.dart
 //
 // State, ViewModel và Providers cho feature Nutrition.
-// Models (DailyTracking, MealEntry, DayNutrition) đã tách sang:
-//   → lib/features/nutrition/models/nutrition_models.dart
+// Tích hợp GamificationService: cộng/trừ điểm khi toggle bữa ăn.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +12,8 @@ import 'package:intl/intl.dart';
 
 import '../../../data/repositories/auth_repo.dart';
 import '../../../data/models/nutrition_models.dart';
+import '../../../data/services/gamification_service.dart';
+import '../../gamification/viewmodels/discipline_viewmodel.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -24,9 +25,9 @@ class NutritionState {
   final Map<String, DayNutrition> weekData;
 
   const NutritionState({
-    this.isLoading    = true,
+    this.isLoading = true,
     this.errorMessage,
-    this.weekData     = const {},
+    this.weekData = const {},
   });
 
   DayNutrition dayOf(DateTime date) {
@@ -40,9 +41,9 @@ class NutritionState {
     Map<String, DayNutrition>? weekData,
   }) =>
       NutritionState(
-        isLoading:    isLoading    ?? this.isLoading,
+        isLoading: isLoading ?? this.isLoading,
         errorMessage: errorMessage,
-        weekData:     weekData     ?? this.weekData,
+        weekData: weekData ?? this.weekData,
       );
 }
 
@@ -52,9 +53,9 @@ class NutritionState {
 
 class NutritionViewModel extends StateNotifier<NutritionState> {
   final Ref _ref;
-  final _db   = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
-  final _fmt  = DateFormat('yyyy-MM-dd');
+  final _fmt = DateFormat('yyyy-MM-dd');
   final _recipeCache = <String, Map<String, dynamic>>{};
 
   NutritionViewModel(this._ref) : super(const NutritionState());
@@ -79,7 +80,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
     try {
       final dates = List.generate(7, (i) => weekStart.add(Duration(days: i)));
 
-      // Fetch user_plans và daily_tracking song song cho cả 7 ngày
       final results = await Future.wait([
         Future.wait(
           dates.map((d) => _db
@@ -95,28 +95,28 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         ),
       ]);
 
-      final planDocs     = results[0];
+      final planDocs = results[0];
       final trackingDocs = results[1];
 
-      // Log kết quả
       for (int i = 0; i < planDocs.length; i++) {
         final doc = planDocs[i];
         if (doc.exists && doc.data() != null) {
           final meals = doc.data()!['meals'] as Map<String, dynamic>?;
-          debugPrint('[NutritionVM] ✅ plan ${_fmt.format(dates[i])} → meals: ${meals?.keys.toList()}');
+          debugPrint(
+              '[NutritionVM] ✅ plan ${_fmt.format(dates[i])} → meals: ${meals?.keys.toList()}');
         } else {
           debugPrint('[NutritionVM] ❌ plan ${_fmt.format(dates[i])} → không có doc');
         }
 
         final tDoc = trackingDocs[i];
         if (tDoc.exists) {
-          debugPrint('[NutritionVM] ✅ tracking ${_fmt.format(dates[i])} → consumed: ${tDoc.data()?['consumed_kcal']} / target: ${tDoc.data()?['target_kcal']}');
+          debugPrint(
+              '[NutritionVM] ✅ tracking ${_fmt.format(dates[i])} → consumed: ${tDoc.data()?['consumed_kcal']} / target: ${tDoc.data()?['target_kcal']}');
         } else {
           debugPrint('[NutritionVM] ❌ tracking ${_fmt.format(dates[i])} → không có doc');
         }
       }
 
-      // Thu thập recipe_id chưa cache
       final toFetch = <String>{};
       for (final doc in planDocs) {
         if (!doc.exists || doc.data() == null) continue;
@@ -128,7 +128,6 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         }
       }
 
-      // Batch-fetch recipe details
       if (toFetch.isNotEmpty) {
         debugPrint('[NutritionVM] fetch recipes: $toFetch');
         final recipeDocs = await Future.wait(
@@ -139,11 +138,10 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
         }
       }
 
-      // Build weekData
       final newWeekData = <String, DayNutrition>{};
       for (int i = 0; i < 7; i++) {
         final dateStr = _fmt.format(dates[i]);
-        final day     = _parseDay(dates[i], planDocs[i], trackingDocs[i]);
+        final day = _parseDay(dates[i], planDocs[i], trackingDocs[i]);
         newWeekData[dateStr] = day;
         debugPrint('[NutritionVM] parsed $dateStr: '
             'B=${day.breakfast.length} L=${day.lunch.length} '
@@ -178,18 +176,17 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
     try {
       final dateKey = _fmt.format(date);
 
-      // Fetch song song cả plan lẫn tracking
       final results = await Future.wait([
         _db.collection('user_plans').doc('${uid}_$dateKey').get(),
         _db.collection('daily_tracking').doc('${uid}_$dateKey').get(),
       ]);
 
-      final planDoc     = results[0];
+      final planDoc = results[0];
       final trackingDoc = results[1];
 
       if (planDoc.exists && planDoc.data() != null) {
         final mealsRaw = (planDoc.data()!['meals'] as Map<String, dynamic>?) ?? {};
-        final toFetch  = <String>{};
+        final toFetch = <String>{};
         for (final mealData in mealsRaw.values) {
           if (mealData is! Map) continue;
           final rid = mealData['recipe_id']?.toString() ?? '';
@@ -206,15 +203,15 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       }
 
       final dayNutrition = _parseDay(date, planDoc, trackingDoc);
-      final updated      = Map<String, DayNutrition>.from(state.weekData);
-      updated[dateKey]   = dayNutrition;
+      final updated = Map<String, DayNutrition>.from(state.weekData);
+      updated[dateKey] = dayNutrition;
       state = state.copyWith(isLoading: false, weekData: updated);
     } catch (e) {
       debugPrint('[NutritionVM] reloadDay error: $e');
     }
   }
 
-  // ── Toggle hoàn thành bữa ──────────────────────────────────────────────────
+  // ── Toggle hoàn thành bữa ăn (có tích hợp Gamification) ───────────────────
   Future<void> toggleMealCompleted({
     required String mealKey,
     required DateTime date,
@@ -223,23 +220,43 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
     if (uid == null) return;
 
     final dateStr = _fmt.format(date);
-    final day     = state.weekData[dateStr];
+    final day = state.weekData[dateStr];
     if (day == null) return;
 
     final entry = day.allMeals.where((e) => e.mealKey == mealKey).firstOrNull;
     if (entry == null) return;
 
-    final newVal = !entry.isCompleted;
-    _patchCompleted(dateStr, day, mealKey, newVal);
+    final isCompleting = !entry.isCompleted;
+
+    // 1. Optimistic update UI
+    _patchCompleted(dateStr, day, mealKey, isCompleting);
 
     try {
+      // 2. Ghi Firestore user_plans TRƯỚC
       await _db
           .collection('user_plans')
           .doc('${uid}_$dateStr')
-          .update({'meals.$mealKey.is_completed': newVal});
+          .update({'meals.$mealKey.is_completed': isCompleting});
+
+      // 3. Gọi GamificationService SAU KHI Firestore ghi xong
+      //    Service tự đọc lại doc để kiểm tra dayFullyDone → chính xác 100%
+      //    Không cần truyền params phụ — tránh race condition
+      final gamification = _ref.read(gamificationServiceProvider);
+      final result = await gamification.onMealToggled(
+        isCompleting: isCompleting,
+        date: date,
+      );
+
+      // 4. Trigger animation điểm trên UI
+      if (result != null && result.pointsDelta != 0) {
+        _ref
+            .read(disciplineViewModelProvider.notifier)
+            .showPointsDelta(result.pointsDelta);
+      }
     } catch (e) {
       debugPrint('[NutritionVM] toggleMealCompleted error: $e');
-      _patchCompleted(dateStr, day, mealKey, !newVal);
+      // Rollback optimistic update
+      _patchCompleted(dateStr, day, mealKey, !isCompleting);
     }
   }
 
@@ -255,9 +272,9 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
     final updated = Map<String, DayNutrition>.from(state.weekData);
     updated[dateStr] = day.copyWith(
       breakfast: day.breakfast.map(patch).toList(),
-      lunch:     day.lunch.map(patch).toList(),
-      dinner:    day.dinner.map(patch).toList(),
-      snack:     day.snack.map(patch).toList(),
+      lunch: day.lunch.map(patch).toList(),
+      dinner: day.dinner.map(patch).toList(),
+      snack: day.snack.map(patch).toList(),
     );
     state = state.copyWith(weekData: updated);
   }
@@ -268,74 +285,80 @@ class NutritionViewModel extends StateNotifier<NutritionState> {
       DocumentSnapshot planDoc,
       DocumentSnapshot trackingDoc,
       ) {
-    // Parse daily_tracking
     final tracking = DailyTracking.fromDoc(trackingDoc);
 
     if (!planDoc.exists || planDoc.data() == null) {
       return DayNutrition(date: date, tracking: tracking);
     }
 
-    final data     = planDoc.data()! as Map<String, dynamic>;
+    final data = planDoc.data()! as Map<String, dynamic>;
     final mealsRaw = data['meals'] as Map<String, dynamic>?;
     if (mealsRaw == null || mealsRaw.isEmpty) {
       return DayNutrition(date: date, tracking: tracking);
     }
 
     final breakfast = <MealEntry>[];
-    final lunch     = <MealEntry>[];
-    final dinner    = <MealEntry>[];
-    final snack     = <MealEntry>[];
+    final lunch = <MealEntry>[];
+    final dinner = <MealEntry>[];
+    final snack = <MealEntry>[];
 
     for (final key in ['Breakfast', 'Lunch', 'Dinner', 'Snack']) {
       final snap = mealsRaw[key];
       if (snap == null || snap is! Map) continue;
 
-      final recipeId    = snap['recipe_id']?.toString() ?? '';
-      final detail      = _recipeCache[recipeId] ?? const {};
+      final recipeId = snap['recipe_id']?.toString() ?? '';
+      final detail = _recipeCache[recipeId] ?? const {};
       final prepTimeMin = (detail['prep_time_min'] as num?)?.toInt() ?? 0;
 
       final rawInst = detail['instructions'];
       final instructions = switch (rawInst) {
         List list => list.map((e) => e.toString()).toList(),
-        String s  => s.split('\n').where((l) => l.trim().isNotEmpty).toList(),
-        _         => <String>[],
+        String s => s.split('\n').where((l) => l.trim().isNotEmpty).toList(),
+        _ => <String>[],
       };
 
       final rawIng = detail['ingredients'];
       final ingredients = rawIng is List
-          ? rawIng.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          ? rawIng
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList()
           : <Map<String, dynamic>>[];
 
       final entry = MealEntry(
-        mealKey:      key,
-        recipeId:     recipeId,
-        name:         snap['name']?.toString() ?? '',
-        imageUrl:     snap['image_url']?.toString() ?? '',
-        calories:     (snap['calories'] as num?)?.toDouble() ?? 0,
-        protein:      (snap['protein']  as num?)?.toDouble() ?? 0,
-        carbs:        (snap['carbs']    as num?)?.toDouble() ?? 0,
-        fat:          (snap['fat']      as num?)?.toDouble() ?? 0,
-        prepTimeMin:  prepTimeMin,
-        isCompleted:  snap['is_completed'] as bool? ?? false,
+        mealKey: key,
+        recipeId: recipeId,
+        name: snap['name']?.toString() ?? '',
+        imageUrl: snap['image_url']?.toString() ?? '',
+        calories: (snap['calories'] as num?)?.toDouble() ?? 0,
+        protein: (snap['protein'] as num?)?.toDouble() ?? 0,
+        carbs: (snap['carbs'] as num?)?.toDouble() ?? 0,
+        fat: (snap['fat'] as num?)?.toDouble() ?? 0,
+        prepTimeMin: prepTimeMin,
+        isCompleted: snap['is_completed'] as bool? ?? false,
         instructions: instructions,
-        ingredients:  ingredients,
+        ingredients: ingredients,
       );
 
       switch (key) {
-        case 'Breakfast': breakfast.add(entry);
-        case 'Lunch':     lunch.add(entry);
-        case 'Dinner':    dinner.add(entry);
-        case 'Snack':     snack.add(entry);
+        case 'Breakfast':
+          breakfast.add(entry);
+        case 'Lunch':
+          lunch.add(entry);
+        case 'Dinner':
+          dinner.add(entry);
+        case 'Snack':
+          snack.add(entry);
       }
     }
 
     return DayNutrition(
-      date:      date,
+      date: date,
       breakfast: breakfast,
-      lunch:     lunch,
-      dinner:    dinner,
-      snack:     snack,
-      tracking:  tracking,
+      lunch: lunch,
+      dinner: dinner,
+      snack: snack,
+      tracking: tracking,
     );
   }
 }
@@ -355,20 +378,15 @@ final weekStartProvider = StateProvider<DateTime>((ref) {
 });
 
 final selectedDateProvider = Provider<DateTime>((ref) {
-  final index     = ref.watch(selectedDayIndexProvider);
+  final index = ref.watch(selectedDayIndexProvider);
   final weekStart = ref.watch(weekStartProvider);
   return weekStart.add(Duration(days: index));
 });
 
-/// ── KEY FIX ──────────────────────────────────────────────────────────────────
-/// Dùng ref.listen(authRepoProvider) THAY VÌ fireImmediately: true
-/// → Đảm bảo loadWeek chỉ chạy SAU KHI Firebase Auth restore session xong
-/// ─────────────────────────────────────────────────────────────────────────────
 final nutritionViewModelProvider =
 StateNotifierProvider<NutritionViewModel, NutritionState>((ref) {
   final vm = NutritionViewModel(ref);
 
-  // Lắng nghe auth: chỉ load khi đã có userId (authenticated)
   ref.listen(authRepoProvider, (previous, next) {
     if (next.isAuthenticated && next.userId != null) {
       vm.loadWeek(ref.read(weekStartProvider));
@@ -378,7 +396,6 @@ StateNotifierProvider<NutritionViewModel, NutritionState>((ref) {
     }
   });
 
-  // Lắng nghe đổi tuần (user bấm < >)
   ref.listen<DateTime>(weekStartProvider, (previous, weekStart) {
     final auth = ref.read(authRepoProvider);
     if (auth.isAuthenticated && auth.userId != null) {
