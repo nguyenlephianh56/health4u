@@ -23,13 +23,13 @@ const _earnItems = [
   _EarnItem(
     emoji: '🥗',
     label: 'Hoàn thành bữa ăn',
-    points: '+5 pts',
+    points: '+10 pts',
     pointColor: Color(0xFF16A34A),
   ),
   _EarnItem(
     emoji: '💪',
     label: 'Hoàn thành bài tập',
-    points: '+10 pts',
+    points: '+20 pts',
     pointColor: Color(0xFF0284C7),
   ),
   _EarnItem(
