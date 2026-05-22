@@ -4,15 +4,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:health4u/core/constants/app_colors.dart';
 import 'package:health4u/data/repositories/health_repo.dart';
 import '../viewmodels/workout_view_model.dart';
+import '../../../data/services/gamification_service.dart';
+import '../../gamification/viewmodels/discipline_viewmodel.dart';
 
 // ── Providers ──────────────────────────────────────────────────────────────────
-// Optimistic: set true NGAY KHI bấm, không reset khi screen dispose.
-// Firestore ghi ở background — UI không chờ.
 final _optimisticDoneProvider =
 StateProvider.family<bool, String>((ref, docId) => false);
 
@@ -94,7 +92,7 @@ class ExerciseDetailScreen extends ConsumerWidget {
   final PlanWorkout workout;
   final String date;
   final String dayOfWeek;
-  final String docId;       // Firestore doc ID để mark completed
+  final String docId;
 
   const ExerciseDetailScreen({
     super.key,
@@ -108,14 +106,13 @@ class ExerciseDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // isDone = true nếu Firestore đã xác nhận HOẶC user vừa bấm (optimistic)
     final firestoreDone = ref.watch(userPlanDaysProvider).maybeWhen(
       data: (days) => days.any((d) => d.date == date && d.isCompleted),
       orElse: () => false,
     );
     final optimisticDone = ref.watch(_optimisticDoneProvider(docId));
-    final isDone = optimisticDone || firestoreDone;
-    final timer = ref.watch(_timerProvider(_totalSeconds));
+    final isDone         = optimisticDone || firestoreDone;
+    final timer          = ref.watch(_timerProvider(_totalSeconds));
 
     return Scaffold(
       backgroundColor: const Color(0xFFEAF3FF),
@@ -186,7 +183,6 @@ class _ExerciseListSection extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Tiêu đề section ──────────────────────────────────────────────
             Row(
               children: [
                 const Text(
@@ -199,8 +195,8 @@ class _ExerciseListSection extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 3),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
@@ -217,10 +213,8 @@ class _ExerciseListSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-
-            // ── Danh sách card bài tập nhỏ ───────────────────────────────────
             ...exercises.asMap().entries.map((entry) {
-              final index   = entry.key;
+              final index    = entry.key;
               final exercise = entry.value;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -236,7 +230,7 @@ class _ExerciseListSection extends ConsumerWidget {
 
 // ── Card bài tập nhỏ ─────────────────────────────────────────────────────────
 class _ExerciseCard extends StatefulWidget {
-  final dynamic exercise; // ExerciseItem
+  final dynamic exercise;
   final int index;
   const _ExerciseCard({required this.exercise, required this.index});
 
@@ -265,7 +259,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       ),
       child: Column(
         children: [
-          // ── Header (luôn hiển thị) ────────────────────────────────────────
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(18),
@@ -273,7 +266,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  // Số thứ tự
                   Container(
                     width: 34,
                     height: 34,
@@ -292,8 +284,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     ),
                   ),
                   const SizedBox(width: 12),
-
-                  // Tên bài tập
                   Expanded(
                     child: Text(
                       ex.name,
@@ -304,8 +294,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                       ),
                     ),
                   ),
-
-                  // Thông số nhanh: sets x reps
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
@@ -323,8 +311,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // Mũi tên expand
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
@@ -338,8 +324,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ),
             ),
           ),
-
-          // ── Chi tiết (chỉ hiển thị khi expanded) ─────────────────────────
           AnimatedCrossFade(
             firstChild: const SizedBox(width: double.infinity),
             secondChild: _ExerciseDetail(exercise: ex),
@@ -354,9 +338,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   }
 }
 
-// ── Chi tiết bài tập nhỏ (khi mở rộng) ──────────────────────────────────────
 class _ExerciseDetail extends StatelessWidget {
-  final dynamic exercise; // ExerciseItem
+  final dynamic exercise;
   const _ExerciseDetail({required this.exercise});
 
   @override
@@ -368,13 +351,8 @@ class _ExerciseDetail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Divider(
-            height: 1,
-            color: AppColors.text.withOpacity(0.07),
-          ),
+          Divider(height: 1, color: AppColors.text.withOpacity(0.07)),
           const SizedBox(height: 14),
-
-          // Ảnh minh họa (nếu có)
           if (ex.imageUrl.isNotEmpty) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -388,8 +366,6 @@ class _ExerciseDetail extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
-
-          // Thông số: sets / reps / nghỉ
           Row(
             children: [
               _StatChip(label: 'Hiệp', value: '${ex.sets}'),
@@ -399,8 +375,6 @@ class _ExerciseDetail extends StatelessWidget {
               _StatChip(label: 'Nghỉ', value: '${ex.restSec}s'),
             ],
           ),
-
-          // Hướng dẫn (nếu có)
           if (ex.instruction.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
@@ -427,7 +401,6 @@ class _ExerciseDetail extends StatelessWidget {
   }
 }
 
-// ── Chip thống số nhỏ (Hiệp / Reps / Nghỉ) ───────────────────────────────────
 class _StatChip extends StatelessWidget {
   final String label;
   final String value;
@@ -538,14 +511,12 @@ class _Banner extends StatelessWidget {
                   Row(
                     children: [
                       _BannerTag(
-                        label: workout.category,
-                        color: AppColors.secondary,
-                      ),
+                          label: workout.category,
+                          color: AppColors.secondary),
                       const SizedBox(width: 8),
                       _BannerTag(
-                        label: workout.difficultyVi,
-                        color: _difficultyColor(workout.difficulty),
-                      ),
+                          label: workout.difficultyVi,
+                          color: _difficultyColor(workout.difficulty)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -766,6 +737,7 @@ class _CompleteButton extends ConsumerWidget {
   final bool isDone;
   final String docId;
   final String date;
+
   const _CompleteButton({
     required this.workout,
     required this.isDone,
@@ -785,7 +757,8 @@ class _CompleteButton extends ConsumerWidget {
           if (docId.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('Không tìm thấy dữ liệu ngày tập'),
+                content:
+                const Text('Không tìm thấy dữ liệu ngày tập'),
                 backgroundColor: Colors.red.shade400,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
@@ -795,16 +768,14 @@ class _CompleteButton extends ConsumerWidget {
             return;
           }
 
-          // ✅ BƯỚC 1: Đổi UI NGAY LẬP TỨC — không await gì cả
+          // Optimistic update UI ngay
           ref.read(_optimisticDoneProvider(docId).notifier).state = true;
 
-          // ✅ BƯỚC 2: Ghi Firestore + cộng điểm ở BACKGROUND
-          // Không await ở đây → UI không bị block
+          // Ghi Firestore + cộng điểm + kiểm tra streak ở background
           _commitToFirestore(context, ref);
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-          isDone ? const Color(0xFFD4ECFF) : AppColors.primary,
+          backgroundColor: isDone ? const Color(0xFFD4ECFF) : AppColors.primary,
           disabledBackgroundColor: const Color(0xFFD4ECFF),
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -835,18 +806,28 @@ class _CompleteButton extends ConsumerWidget {
     );
   }
 
-  /// Ghi Firestore + cộng điểm hoàn toàn ở background.
-  /// Nếu lỗi → rollback optimistic, hiển thị snackbar.
   Future<void> _commitToFirestore(BuildContext context, WidgetRef ref) async {
     try {
-      // Ghi is_completed = true vào Firestore
+      // 1. Ghi is_completed = true vào user_plans qua health_repo
       await ref.read(healthRepoProvider).markDayCompleted(docId);
 
-      // Invalidate để streak ở header tự cập nhật (chạy sau khi UI đã đổi rồi)
+      // Refresh danh sách plan days
       ref.invalidate(userPlanDaysProvider);
 
-      // Cộng điểm
-      await _addPoints(points: 20);
+      // 2. Gọi GamificationService SAU KHI Firestore ghi xong
+      //    Service tự đọc lại doc → kiểm tra isDayFullyDone → cộng điểm + streak
+      final date     = DateTime.parse(this.date);
+      final result   = await GamificationService().onWorkoutToggled(
+        isCompleting: true,
+        date: date,
+      );
+
+      // 3. Trigger animation điểm
+      if (result != null && result.pointsDelta != 0) {
+        ref
+            .read(disciplineViewModelProvider.notifier)
+            .showPointsDelta(result.pointsDelta);
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -863,6 +844,7 @@ class _CompleteButton extends ConsumerWidget {
     } catch (e) {
       // Rollback nếu ghi thất bại
       ref.read(_optimisticDoneProvider(docId).notifier).state = false;
+      debugPrint('❌ ExerciseDetail._commitToFirestore error: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -875,17 +857,6 @@ class _CompleteButton extends ConsumerWidget {
         );
       }
     }
-  }
-
-  Future<void> _addPoints({required int points}) async {
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'total_points': FieldValue.increment(points)});
-    } catch (_) {}
   }
 }
 
