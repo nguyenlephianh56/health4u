@@ -1,7 +1,4 @@
 // lib/features/grocery/viewmodels/grocery_viewmodel.dart
-//
-// ĐÃ FIX: Dùng watchMealPlansForWeek (realtime stream) thay getMealPlansForWeek
-// UserPlanEntry giờ dùng referenceId = meals.X.recipe_id (đúng với Firestore)
 
 import 'dart:async';
 
@@ -28,6 +25,10 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
 
   final Map<String, RecipeModel> _recipeCache = {};
   List<UserPlanEntry> _currentPlans = [];
+
+  // FIX: Cache isBought từ Firestore stream — dùng làm source of truth
+  // thay vì state in-memory khi rebuild items
+  Map<String, bool> _firestoreBoughtStatus = {};
 
   GroceryViewModel({
     required GroceryRepo repo,
@@ -57,12 +58,20 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     _boughtSub?.cancel();
     _currentPlans = [];
     _recipeCache.clear();
+    _firestoreBoughtStatus = {}; // FIX: reset cache khi đổi tuần
 
     state = state.copyWith(
       status:    GroceryStatus.loading,
       weekStart: weekStart,
       items:     [],
     );
+
+    // FIX: Subscribe boughtStatus TRƯỚC plans để cache sẵn sàng khi plans đến
+    _boughtSub = _repo
+        .watchBoughtStatus(userId: _userId, weekStart: weekStart)
+        .listen(_onBoughtStatusChanged, onError: (e) {
+      debugPrint('[GroceryVM] watchBoughtStatus error: $e');
+    });
 
     _plansSub = _repo
         .watchMealPlansForWeek(userId: _userId, weekStart: weekStart)
@@ -75,6 +84,23 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     });
   }
 
+  // ── Xử lý khi bought status thay đổi từ Firestore ────────────────────────
+
+  void _onBoughtStatusChanged(Map<String, bool> statusMap) {
+    // FIX: Cập nhật cache Firestore
+    _firestoreBoughtStatus = statusMap;
+
+    // Nếu đã có items → merge ngay, không cần đợi plans emit lại
+    if (state.items.isEmpty) return;
+    final updated = state.items.map((item) {
+      final key = '${item.name}__${item.unit}';
+      return item.copyWith(
+        isBought: _firestoreBoughtStatus[key] ?? false,
+      );
+    }).toList();
+    state = state.copyWith(items: updated);
+  }
+
   // ── Xử lý khi plans thay đổi ─────────────────────────────────────────────
 
   Future<void> _onPlansChanged(List<UserPlanEntry> newPlans) async {
@@ -84,8 +110,6 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     _currentPlans = newPlans;
 
     if (newPlans.isEmpty) {
-      _boughtSub?.cancel();
-      _boughtSub = null;
       state = state.copyWith(status: GroceryStatus.success, items: []);
       return;
     }
@@ -113,26 +137,19 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       }
     }
 
-    // Aggregate
+    // Aggregate nguyên liệu
     final aggregated = _aggregateIngredients(newPlans, _recipeCache);
 
-    // Giữ isBought cho item cũ còn tồn tại
-    final existingBought = {
-      for (final i in state.items) '${i.name}__${i.unit}': i.isBought,
-    };
+    // FIX: Dùng _firestoreBoughtStatus làm source of truth thay vì state cũ
+    // → Đảm bảo sau khi reload app, tick vẫn còn
     final mergedItems = aggregated.map((item) {
       final key = '${item.name}__${item.unit}';
-      return item.copyWith(isBought: existingBought[key] ?? false);
+      return item.copyWith(
+        isBought: _firestoreBoughtStatus[key] ?? false,
+      );
     }).toList();
 
     state = state.copyWith(status: GroceryStatus.success, items: mergedItems);
-
-    // Subscribe isBought nếu chưa có
-    _boughtSub ??= _repo
-        .watchBoughtStatus(userId: _userId, weekStart: state.weekStart)
-        .listen(_mergeBoughtStatus, onError: (e) {
-      debugPrint('[GroceryVM] watchBoughtStatus error: $e');
-    });
   }
 
   bool _hasPlansChanged(
@@ -140,14 +157,17 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       List<UserPlanEntry> newList,
       ) {
     if (oldList.length != newList.length) return true;
-    final oldSet = oldList.map((p) => '${p.date}_${p.mealType}_${p.referenceId}').toSet();
-    final newSet = newList.map((p) => '${p.date}_${p.mealType}_${p.referenceId}').toSet();
+    final oldSet = oldList
+        .map((p) => '${p.date}_${p.mealType}_${p.referenceId}')
+        .toSet();
+    final newSet = newList
+        .map((p) => '${p.date}_${p.mealType}_${p.referenceId}')
+        .toSet();
     return !oldSet.containsAll(newSet) || !newSet.containsAll(oldSet);
   }
 
-  // ── Unit conversion helpers ──────────────────────────────────────────────
+  // ── Unit conversion helpers ───────────────────────────────────────────────
 
-  /// Nhóm đơn vị: 'mass' hoặc 'volume' hoặc 'other'
   static String _unitGroup(String unit) {
     const massUnits   = {'g', 'gram', 'kg', 'oz', 'lb'};
     const volumeUnits = {'ml', 'l', 'tsp', 'tbsp', 'cup', 'fl_oz'};
@@ -157,16 +177,13 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     return 'other';
   }
 
-  /// Quy đổi về đơn vị cơ bản: gram (mass) hoặc ml (volume)
   static double _toBase(double amount, String unit) {
     switch (unit.toLowerCase().trim()) {
-    // mass
       case 'kg':    return amount * 1000;
       case 'oz':    return amount * 28.3495;
       case 'lb':    return amount * 453.592;
       case 'g':
       case 'gram':  return amount;
-    // volume
       case 'l':     return amount * 1000;
       case 'tsp':   return amount * 5;
       case 'tbsp':  return amount * 15;
@@ -177,16 +194,18 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     }
   }
 
-  /// Chuyển từ đơn vị cơ bản về đơn vị hiển thị đẹp nhất
   static (double, String) _fromBase(double baseAmount, String group) {
     if (group == 'mass') {
       if (baseAmount >= 1000) return (baseAmount / 1000, 'kg');
       return (baseAmount, 'g');
     } else if (group == 'volume') {
       if (baseAmount >= 1000) return (baseAmount / 1000, 'l');
-      if (baseAmount >= 240)  return (double.parse((baseAmount / 240).toStringAsFixed(2)), 'cup');
-      if (baseAmount >= 15)   return (double.parse((baseAmount / 15).toStringAsFixed(1)), 'tbsp');
-      if (baseAmount >= 5)    return (double.parse((baseAmount / 5).toStringAsFixed(1)), 'tsp');
+      if (baseAmount >= 240)
+        return (double.parse((baseAmount / 240).toStringAsFixed(2)), 'cup');
+      if (baseAmount >= 15)
+        return (double.parse((baseAmount / 15).toStringAsFixed(1)), 'tbsp');
+      if (baseAmount >= 5)
+        return (double.parse((baseAmount / 5).toStringAsFixed(1)), 'tsp');
       return (baseAmount, 'ml');
     }
     return (baseAmount, '');
@@ -196,8 +215,6 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       List<UserPlanEntry> plans,
       Map<String, RecipeModel> recipeMap,
       ) {
-    // key: 'normalizedName__group__category'  (group = mass | volume | other)
-    // value: { baseAmount, mealCount, displayName, category, originalUnit }
     final Map<String, _AggBuffer> buffers = {};
 
     for (final plan in plans) {
@@ -207,12 +224,11 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       for (final ing in recipe.ingredients) {
         final normalizedName = ing.name.toLowerCase().trim();
         final group = _unitGroup(ing.unit);
-
-        // Nếu đơn vị là 'other' (cái, quả, ...), vẫn gộp theo tên + unit gốc
-        final groupKey = group == 'other' ? ing.unit.toLowerCase().trim() : group;
+        final groupKey =
+        group == 'other' ? ing.unit.toLowerCase().trim() : group;
         final key = '${normalizedName}__${groupKey}__${ing.category.value}';
-
-        final base = group == 'other' ? ing.amount : _toBase(ing.amount, ing.unit);
+        final base =
+        group == 'other' ? ing.amount : _toBase(ing.amount, ing.unit);
 
         if (buffers.containsKey(key)) {
           buffers[key]!.baseAmount += base;
@@ -231,7 +247,8 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
     }
 
     final result = buffers.values.map((buf) {
-      final (displayAmount, displayUnit) = buf.group == 'mass' || buf.group == 'volume'
+      final (displayAmount, displayUnit) =
+      buf.group == 'mass' || buf.group == 'volume'
           ? _fromBase(buf.baseAmount, buf.group)
           : (buf.baseAmount, buf.originalUnit);
 
@@ -252,20 +269,13 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       });
   }
 
-  void _mergeBoughtStatus(Map<String, bool> statusMap) {
-    if (statusMap.isEmpty) return;
-    final updated = state.items.map((item) {
-      final key = '${item.name}__${item.unit}';
-      return item.copyWith(isBought: statusMap[key] ?? item.isBought);
-    }).toList();
-    state = state.copyWith(items: updated);
-  }
-
   // ── Public API ────────────────────────────────────────────────────────────
 
-  Future<void> loadWeek(DateTime weekStart) async => _subscribeToWeek(weekStart);
+  Future<void> loadWeek(DateTime weekStart) async =>
+      _subscribeToWeek(weekStart);
 
   Future<void> toggleItem(String name, String unit) async {
+    // Optimistic update
     final updated = state.items.map((item) {
       if (item.name == name && item.unit == unit) {
         return item.copyWith(isBought: !item.isBought);
@@ -273,9 +283,8 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
       return item;
     }).toList();
 
-    final newBought = updated
-        .firstWhere((i) => i.name == name && i.unit == unit)
-        .isBought;
+    final newBought =
+        updated.firstWhere((i) => i.name == name && i.unit == unit).isBought;
 
     state = state.copyWith(items: updated);
 
@@ -287,6 +296,8 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
         itemUnit:  unit,
         isBought:  newBought,
       );
+      // Sau khi ghi xong, _boughtSub sẽ emit update → _onBoughtStatusChanged
+      // tự cập nhật _firestoreBoughtStatus và state
     } catch (e) {
       debugPrint('[GroceryVM] toggleItem error: $e');
       // Rollback
@@ -301,19 +312,22 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
   }
 
   Future<void> resetAll() async {
-    final updated = state.items.map((i) => i.copyWith(isBought: false)).toList();
+    final updated =
+    state.items.map((i) => i.copyWith(isBought: false)).toList();
     state = state.copyWith(items: updated);
     try {
       await _repo.saveGroceryList(
         userId:    _userId,
         weekStart: state.weekStart,
-        items:     updated.map((i) => GroceryFirestoreItem(
+        items:     updated
+            .map((i) => GroceryFirestoreItem(
           name:     i.name,
           amount:   i.totalAmount,
           unit:     i.unit,
           category: i.category.value,
           isBought: false,
-        )).toList(),
+        ))
+            .toList(),
       );
     } catch (e) {
       debugPrint('[GroceryVM] resetAll error: $e');
@@ -337,15 +351,15 @@ class GroceryViewModel extends StateNotifier<GroceryState> {
   }
 }
 
-// ─── Internal buffer class dùng cho aggregation ───────────────────────────────
+// ─── Internal buffer ──────────────────────────────────────────────────────────
 
 class _AggBuffer {
-  final String            displayName;
-  final String            group;        // 'mass' | 'volume' | unit gốc nếu 'other'
-  final String            originalUnit;
+  final String             displayName;
+  final String             group;
+  final String             originalUnit;
   final IngredientCategory category;
-  double                  baseAmount;
-  int                     mealCount;
+  double                   baseAmount;
+  int                      mealCount;
 
   _AggBuffer({
     required this.displayName,
@@ -365,7 +379,6 @@ StateNotifierProvider<GroceryViewModel, GroceryState>((ref) {
   final initialUserId = ref.read(authRepoProvider).userId ?? '';
   final vm            = GroceryViewModel(repo: repo, userId: initialUserId);
 
-  // Watch auth — cập nhật userId khi auth hoàn tất
   ref.listen(authRepoProvider, (_, next) {
     vm.updateUserId((next as dynamic).userId as String? ?? '');
   });
