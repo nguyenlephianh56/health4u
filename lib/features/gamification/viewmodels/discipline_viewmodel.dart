@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../data/services/gamification_service.dart';
+import '../../../data/repositories/auth_repo.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -144,7 +145,20 @@ class DisciplineViewModel extends StateNotifier<DisciplineState> {
 
 final disciplineViewModelProvider =
 StateNotifierProvider<DisciplineViewModel, DisciplineState>((ref) {
-  return DisciplineViewModel();
+  final vm = DisciplineViewModel();
+
+  // Lắng nghe auth state — gọi lại refresh() khi user login/logout
+  // Giải quyết trường hợp provider được tạo trước khi Firebase Auth sẵn sàng
+  ref.listen(authRepoProvider, (previous, next) {
+    if (next.isAuthenticated && next.userId != null) {
+      vm.refresh();
+    }
+    if (next.isUnauthenticated || next.isOnboarding) {
+      vm.refresh(); // _listenToUser thấy uid==null → reset state về 0
+    }
+  });
+
+  return vm;
 });
 
 final totalPointsProvider = Provider<int>(
