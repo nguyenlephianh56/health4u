@@ -121,46 +121,6 @@ class AuthRepo extends StateNotifier<AuthStateModel> {
     // _onAuthChanged tự gọi sau khi Firebase emit
   }
 
-  /// Đăng ký — role mặc định "user"
-  Future<void> register({
-    required String name,
-    required String email,
-    required String password,
-    required String gender,
-    required String dob,
-  }) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final uid = credential.user!.uid;
-
-    await _db.collection('users').doc(uid).set({
-      'email':          email.trim(),
-      'name':           name.trim(),
-      'gender':         gender,
-      'dob':            dob,
-      'password_hash':  _hashPassword(password),
-      'role':           'user',
-      'height_cm':      null,
-      'weight_kg':      null,
-      'activity_level': null,
-      'goal':           null,
-      'current_streak':   0,
-      'best_streak':      0,
-      'last_streak_date': '',
-      'total_points':     0,
-      'avatar_url':       null,
-      'created_at':       FieldValue.serverTimestamp(),
-    });
-
-    await credential.user!.updateDisplayName(name.trim());
-
-    // Đăng ký xong → đánh dấu đã xem onboarding
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kHasSeenOnboarding, true);
-  }
-
   /// Lưu thông tin bổ sung sau khi đăng ký (InfoSetupScreen)
   Future<void> saveUserInfo({
     required double heightCm,
