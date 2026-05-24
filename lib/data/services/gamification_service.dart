@@ -78,6 +78,7 @@ class GamificationService {
   }
 
   /// Gọi khi mở app — reset streak về 0 nếu user bỏ lỡ ngày hôm qua.
+  /// Nếu user có shield → dùng shield bảo vệ thay vì reset.
   Future<void> checkStreakReset() async {
     final uid = _uid;
     if (uid == null) return;
@@ -85,9 +86,10 @@ class GamificationService {
       final snap = await _db.collection('users').doc(uid).get();
       if (!snap.exists) return;
 
-      final data     = snap.data() ?? {};
-      final streak   = (data['current_streak'] as num?)?.toInt() ?? 0;
-      final lastDate = data['last_streak_date']?.toString() ?? '';
+      final data        = snap.data() ?? {};
+      final streak      = (data['current_streak'] as num?)?.toInt() ?? 0;
+      final lastDate    = data['last_streak_date']?.toString() ?? '';
+      final shieldCount = (data['shield_count'] as num?)?.toInt() ?? 0;
 
       if (streak == 0 || lastDate.isEmpty) return;
 
@@ -97,10 +99,21 @@ class GamificationService {
       // Đã hoàn thành hôm nay → không reset
       if (lastDate == today) return;
 
-      // lastDate < hôm qua → bỏ lỡ ít nhất 1 ngày → reset
+      // lastDate < hôm qua → bỏ lỡ ít nhất 1 ngày
       if (lastDate.compareTo(yesterday) < 0) {
-        await _db.collection('users').doc(uid).update({'current_streak': 0});
-        print('[GAMI] ⚠️ streak reset | last=$lastDate yesterday=$yesterday');
+        if (shieldCount > 0) {
+          // Có shield → dùng 1 shield, giữ nguyên streak
+          // Cập nhật last_streak_date = hôm qua để tránh dùng shield lần nữa
+          await _db.collection('users').doc(uid).update({
+            'shield_count':     shieldCount - 1,
+            'last_streak_date': yesterday,
+          });
+          print('[GAMI] 🛡️ shield used | streak=$streak giữ nguyên | shield còn=${shieldCount - 1}');
+        } else {
+          // Không có shield → reset streak về 0
+          await _db.collection('users').doc(uid).update({'current_streak': 0});
+          print('[GAMI] ⚠️ streak reset | last=$lastDate yesterday=$yesterday');
+        }
       }
       // lastDate == yesterday → chưa hoàn thành hôm nay nhưng chưa bỏ lỡ → giữ nguyên
     } catch (e) {
