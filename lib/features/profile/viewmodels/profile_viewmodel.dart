@@ -58,7 +58,10 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
   }
 
   Future<void> loadProfile() async {
-    state = state.copyWith(status: ProfileStatus.loading);
+    // Clear user cũ ngay khi bắt đầu load — tránh hiển thị data của
+    // tài khoản trước trong lúc chờ Future.wait() trả về (đặc biệt khi
+    // đổi user mà ViewModel này chưa kịp bị dispose/reset).
+    state = state.copyWith(status: ProfileStatus.loading, user: null);
     try {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Chưa đăng nhập');

@@ -24,6 +24,12 @@ class DailyTrackingData {
   });
 }
 
+// Sentinel để phân biệt "không truyền tham số" với "truyền null" trong copyWith.
+class _Unset {
+  const _Unset();
+}
+const _unset = _Unset();
+
 class ProfileState {
   final ProfileStatus       status;
   final String?             errorMessage;
@@ -43,16 +49,20 @@ class ProfileState {
 
   ProfileState copyWith({
     ProfileStatus?      status,
-    String?             errorMessage,
-    UserModel?          user,
+    Object?             errorMessage = _unset,
+    Object?             user         = _unset,
     DailyTrackingData?  tracking,
     bool?               isUploadingAvatar,
     bool?               isSavingName,
   }) {
     return ProfileState(
       status:            status            ?? this.status,
-      errorMessage:      errorMessage      ?? this.errorMessage,
-      user:              user              ?? this.user,
+      errorMessage:      errorMessage == _unset
+          ? this.errorMessage
+          : errorMessage as String?,
+      user:              user == _unset
+          ? this.user
+          : user as UserModel?,
       tracking:          tracking          ?? this.tracking,
       isUploadingAvatar: isUploadingAvatar ?? this.isUploadingAvatar,
       isSavingName:      isSavingName      ?? this.isSavingName,

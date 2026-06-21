@@ -10,8 +10,10 @@ import '../../../data/repositories/reward_repo.dart';
 import 'reward_shop_state.dart';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
+// autoDispose: huỷ ViewModel (và state cũ) khi không còn widget nào watch nữa,
+// tránh giữ state của user cũ khi đổi tài khoản hoặc rời màn hình.
 final rewardShopViewModelProvider =
-StateNotifierProvider<RewardShopViewModel, RewardShopState>(
+StateNotifierProvider.autoDispose<RewardShopViewModel, RewardShopState>(
       (ref) => RewardShopViewModel(RewardRepo()),
 );
 
@@ -23,7 +25,10 @@ class RewardShopViewModel extends StateNotifier<RewardShopState> {
 
   // ── Khởi tạo dữ liệu ──────────────────────────────────────────────────────
   Future<void> init({required String uid, required int totalPoints}) async {
-    state = state.copyWith(isLoading: true, totalPoints: totalPoints);
+    // Reset sạch state cũ trước khi load — phòng trường hợp ViewModel
+    // chưa kịp bị dispose (đổi user, mở lại màn hình, v.v.) thì vẫn
+    // không bị dính data của user trước.
+    state = RewardShopState(isLoading: true, totalPoints: totalPoints);
     try {
       final results = await Future.wait([
         _repo.fetchAllItems(),
