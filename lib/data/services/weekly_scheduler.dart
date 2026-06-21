@@ -28,24 +28,30 @@ class WeeklyScheduler {
     await PlanWorkerService.registerWeeklyTask();
   }
 
-  // ── Gọi trong WorkManager callbackDispatcher ──────────────────────────
-  // Kiểm tra nếu hôm nay là thứ Hai VÀ chưa generate tuần này → generate
+  // ── Gọi trong WorkManager callbackDispatcher, và cũng gọi mỗi khi app mở ──
+  // (xem ProfileViewModel.loadProfile()) làm fallback vì WorkManager không
+  // đảm bảo chạy đúng giờ.
+  //
+  // Điều kiện generate: tuần hiện tại (tính từ thứ Hai gần nhất) CHƯA được
+  // generate — KHÔNG yêu cầu hôm nay phải đúng là thứ Hai. Nhờ vậy nếu app
+  // bị bỏ quên qua cả thứ Hai (không mở app, WorkManager cũng không chạy),
+  // thì lần mở app kế tiếp — dù là thứ Ba, thứ Tư... — vẫn sẽ generate bù
+  // ngay, thay vì im lặng giữ plan của tuần trước.
   Future<bool> runIfNeeded() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return false;
 
-    final now        = DateTime.now();
-    final isMonday   = now.weekday == DateTime.monday;
     final thisMonday = _getThisMonday();
     final mondayStr  = _fmt(thisMonday);
 
-    final prefs        = await SharedPreferences.getInstance();
+    final prefs         = await SharedPreferences.getInstance();
     final lastGenerated = prefs.getString('${_kLastGeneratedKey}_$uid');
 
-    // Chỉ generate nếu là thứ Hai và chưa generate tuần này
-    if (!isMonday || lastGenerated == mondayStr) return false;
+    // Đã generate cho tuần này rồi (kể cả nếu generate trễ vào thứ Ba...)
+    // thì không cần generate lại.
+    if (lastGenerated == mondayStr) return false;
 
-    await _generateNow(weekStart: isMonday ? thisMonday : null);
+    await _generateNow(weekStart: thisMonday);
     await prefs.setString('${_kLastGeneratedKey}_$uid', mondayStr);
     return true;
   }

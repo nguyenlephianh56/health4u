@@ -1,5 +1,6 @@
 // lib/features/profile/viewmodels/profile_viewmodel.dart
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../../../data/models/user_model.dart';
 import '../../../data/services/cloudinary_service.dart';
+import '../../../data/services/weekly_scheduler.dart';
 import '../../../data/repositories/auth_repo.dart';
 import 'profile_state.dart';
 
@@ -62,6 +64,13 @@ class ProfileViewModel extends StateNotifier<ProfileState> {
     // tài khoản trước trong lúc chờ Future.wait() trả về (đặc biệt khi
     // đổi user mà ViewModel này chưa kịp bị dispose/reset).
     state = state.copyWith(status: ProfileStatus.loading, user: null);
+
+    // Fallback bù plan tuần mới: WorkManager không đảm bảo chạy đúng 0h
+    // thứ Hai (đặc biệt khi app lâu ngày không mở). Mỗi lần app load
+    // profile (mở app / quay lại), tự kiểm tra và generate bù nếu lỡ.
+    // Không await/chặn UI — chạy nền, fail thì thôi (sẽ thử lại lần sau).
+    unawaited(_ref.read(weeklySchedulerProvider).runIfNeeded());
+
     try {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Chưa đăng nhập');
